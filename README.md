@@ -9,6 +9,11 @@ Run it directly from GitHub with a single command — no manual install needed.
 - **`list_tasks`** — Query tasks from your vault with flexible filters (status, tags, due date, folder)
 - **`update_task`** — Mark done/undone, reschedule, add/remove tags, update description
 - **`create_task`** — Add tasks to today's daily note, inbox, or any file
+- **`get_daily_briefing`** — Get today's due tasks and all overdue incomplete tasks in one call
+- **`get_task_stats`** — Counts grouped by status, file, tag, and priority
+- **`delete_task`** — Remove a task line from a file (with optional dry-run preview)
+- **`bulk_update_tasks`** — Apply the same operation to many tasks at once, selected by ID or filter
+- **`search_tasks`** — Full-text search across descriptions, wikilinks, and tags with relevance ranking
 
 ## Quick Start
 
@@ -101,6 +106,74 @@ create_task(
     file_path=""              # only needed when target="file"
 )
 ```
+
+### `get_daily_briefing`
+
+```python
+get_daily_briefing()
+```
+
+Returns today's due tasks and all overdue incomplete tasks. Unlike `list_tasks` and `search_tasks`, this tool searches across **all** files — including Journal files — so no tasks are missed.
+
+**Response fields:** `date`, `today_count`, `today_tasks`, `overdue_count`, `overdue_tasks`
+
+### `get_task_stats`
+
+```python
+get_task_stats()
+```
+
+Returns aggregate counts for every task in the vault.
+
+**Response fields:** `total`, `by_status`, `by_file`, `by_tag`, `by_priority`
+
+### `delete_task`
+
+```python
+delete_task(
+    file_path="Projects/work.md",
+    line_number=14,
+    dry_run=False   # True = preview only, no changes written
+)
+```
+
+Deletes a task line from a vault file. Use `dry_run=True` to preview the deletion before committing.
+
+### `bulk_update_tasks`
+
+```python
+bulk_update_tasks(
+    task_ids=["Projects/work.md:5", "Projects/work.md:10"],  # explicit IDs, or…
+    filter_file="Projects/work.md",   # …use filters to select automatically
+    filter_status="incomplete",
+    filter_tag="tech-debt",
+    operation="mark_done",            # same operations as update_task
+    value="",
+    dry_run=False
+)
+```
+
+Applies the same operation to many tasks at once. Provide either explicit `task_ids` (formatted as `"file_path:line"`) or a combination of `filter_file`, `filter_status`, and `filter_tag`. Updates are applied bottom-up within each file to keep line numbers stable.
+
+### `search_tasks`
+
+```python
+search_tasks(
+    query="auth module",
+    status="incomplete",       # "all" | "incomplete" | "complete"
+    path_excludes="Journal",   # default excludes journal noise
+    limit=30
+)
+```
+
+Full-text search across task descriptions, wikilinks, and tags. Results are ranked by relevance:
+
+| Score | Condition |
+|-------|-----------|
+| 100 | Exact phrase match |
+| 70 | All query tokens present |
+| 50 | Tag contains query text |
+| ≤ 40 | Partial token match |
 
 ## Task Format
 
