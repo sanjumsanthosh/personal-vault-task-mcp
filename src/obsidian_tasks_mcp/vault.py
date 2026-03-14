@@ -137,6 +137,10 @@ class VaultManager:
             task["tags"] = [t for t in task["tags"] if t != tag]
         elif operation == "update_description":
             task["description"] = value
+        elif operation == "add_reminder":
+            task["reminder_time"] = value
+        elif operation == "remove_reminder":
+            task["reminder_time"] = ""
         else:
             raise ValueError(f"Unknown operation: {operation!r}")
 
@@ -315,6 +319,10 @@ class VaultManager:
             task["tags"] = [t for t in task["tags"] if t != tag]
         elif operation == "update_description":
             task["description"] = value
+        elif operation == "add_reminder":
+            task["reminder_time"] = value
+        elif operation == "remove_reminder":
+            task["reminder_time"] = ""
         else:
             raise ValueError(f"Unknown operation: {operation!r}")
 
