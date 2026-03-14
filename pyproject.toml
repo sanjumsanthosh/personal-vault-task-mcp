@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "obsidian-tasks-mcp"
+version = "0.1.0"
+description = "Personal MCP server for querying and managing Obsidian Tasks"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "fastmcp>=2.0.0",
+    "obsidianmd-parser>=0.1.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+# THIS is what uvx runs — maps "obsidian-tasks-mcp" command to your server
+[project.scripts]
+obsidian-tasks-mcp = "obsidian_tasks_mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

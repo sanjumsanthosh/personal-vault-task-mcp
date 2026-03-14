@@ -1,0 +1,136 @@
+"""Parser for Obsidian Tasks plugin markdown format.
+
+Handles the emoji-based syntax used by the Obsidian Tasks plugin:
+  - [ ] Description 🔺 📅 2026-03-15 #tag
+  - [x] Done task ✅ 2026-03-14
+"""
+
+import re
+from typing import Optional
+
+# Match a task line: optional indent, dash, checkbox, content
+TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.+)$")
+
+# Obsidian Tasks plugin emoji patterns
+DUE_DATE_PATTERN = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
+DONE_DATE_PATTERN = re.compile(r"✅\s*(\d{4}-\d{2}-\d{2})")
+SCHEDULED_DATE_PATTERN = re.compile(r"⏳\s*(\d{4}-\d{2}-\d{2})")
+
+# Tags: #word-with-hyphens or #word/with/slashes, not starting with digit
+TAG_PATTERN = re.compile(r"(?<![&\w])#([A-Za-z_][A-Za-z0-9_/\-]*)")
+
+# Priority emoji mappings (Obsidian Tasks plugin standard)
+# Each entry: (tuple of emoji variants, priority name)
+_PRIORITY_ENTRIES: list[tuple[tuple[str, ...], str]] = [
+    (("🔺",), "highest"),
+    (("⬆️", "⬆"),  "high"),
+    (("🔼",), "medium"),
+    (("🔽",), "low"),
+    (("⬇️", "⬇"),  "lowest"),
+]
+
+# Build lookup maps
+EMOJI_TO_PRIORITY: dict[str, str] = {}
+for _emojis, _name in _PRIORITY_ENTRIES:
+    for _e in _emojis:
+        EMOJI_TO_PRIORITY[_e] = _name
+
+# Use the first (canonical) emoji for each priority when formatting
+PRIORITY_TO_EMOJI: dict[str, str] = {
+    name: emojis[0] for emojis, name in _PRIORITY_ENTRIES
+}
+PRIORITY_TO_EMOJI["none"] = ""
+
+
+def is_task_line(line: str) -> bool:
+    """Return True if the line is an Obsidian task line."""
+    return TASK_LINE_PATTERN.match(line) is not None
+
+
+def parse_task_line(
+    line: str, file_path: str = "", line_number: int = 0
+) -> Optional[dict]:
+    """Parse an Obsidian Tasks plugin task line into a structured dict.
+
+    Returns None if the line is not a task line.
+
+    The returned dict has keys:
+        id, description, status, tags, due_date, done_date,
+        priority, file_path, line_number
+    """
+    match = TASK_LINE_PATTERN.match(line)
+    if not match:
+        return None
+
+    _indent, status_char, content = match.groups()
+    status = "complete" if status_char.lower() == "x" else "incomplete"
+
+    # Extract due date
+    due_match = DUE_DATE_PATTERN.search(content)
+    due_date = due_match.group(1) if due_match else ""
+
+    # Extract done date
+    done_match = DONE_DATE_PATTERN.search(content)
+    done_date = done_match.group(1) if done_match else ""
+
+    # Extract priority (first matching emoji wins)
+    priority = "none"
+    for emoji, name in EMOJI_TO_PRIORITY.items():
+        if emoji in content:
+            priority = name
+            break
+
+    # Extract inline tags
+    tags = TAG_PATTERN.findall(content)
+
+    # Build description: strip all known emoji markers and tags
+    description = content
+    description = DUE_DATE_PATTERN.sub("", description)
+    description = DONE_DATE_PATTERN.sub("", description)
+    description = SCHEDULED_DATE_PATTERN.sub("", description)
+    for emoji in EMOJI_TO_PRIORITY:
+        description = description.replace(emoji, "")
+    description = TAG_PATTERN.sub("", description)
+    description = description.strip()
+
+    return {
+        "id": f"{file_path}:{line_number}",
+        "description": description,
+        "status": status,
+        "tags": tags,
+        "due_date": due_date,
+        "done_date": done_date,
+        "priority": priority,
+        "file_path": file_path,
+        "line_number": line_number,
+    }
+
+
+def format_task_line(task: dict) -> str:
+    """Serialise a task dict back to an Obsidian Tasks plugin markdown line.
+
+    Output order: - [status] description [priority] [📅 due] [✅ done] [#tags]
+    """
+    status_char = "x" if task.get("status") == "complete" else " "
+
+    parts: list[str] = [f"- [{status_char}]", task.get("description", "").strip()]
+
+    priority = task.get("priority", "none")
+    if priority and priority != "none":
+        emoji = PRIORITY_TO_EMOJI.get(priority, "")
+        if emoji:
+            parts.append(emoji)
+
+    due_date = task.get("due_date", "")
+    if due_date:
+        parts.append(f"📅 {due_date}")
+
+    done_date = task.get("done_date", "")
+    if done_date:
+        parts.append(f"✅ {done_date}")
+
+    for tag in task.get("tags", []):
+        if tag:
+            parts.append(f"#{tag}")
+
+    return " ".join(p for p in parts if p)
