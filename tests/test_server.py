@@ -1,6 +1,7 @@
 """Tests for server-level helper functions and new tools."""
 
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,8 @@ FIXTURES_DIR = Path(__file__).parent / "fixtures" / "sample_vault"
 @pytest.fixture()
 def sample_tasks() -> list[dict]:
     """A small list of task dicts exercising all group_by dimensions."""
+    overdue_date = (date.today() - timedelta(days=365)).isoformat()
+    future_date = (date.today() + timedelta(days=365)).isoformat()
     return [
         {
             "id": "Projects/work.md:1",
@@ -21,7 +24,7 @@ def sample_tasks() -> list[dict]:
             "status": "incomplete",
             "tags": ["backend", "deploy"],
             "wikilinks": [],
-            "due_date": "2020-01-01",   # overdue
+            "due_date": overdue_date,
             "done_date": "",
             "reminder_time": "",
             "priority": "highest",
@@ -34,7 +37,7 @@ def sample_tasks() -> list[dict]:
             "status": "incomplete",
             "tags": ["backend"],
             "wikilinks": [],
-            "due_date": "2099-12-31",   # future
+            "due_date": future_date,
             "done_date": "",
             "reminder_time": "",
             "priority": "high",
