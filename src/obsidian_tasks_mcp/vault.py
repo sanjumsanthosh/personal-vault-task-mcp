@@ -101,6 +101,8 @@ class VaultManager:
             add_tag             — append tag (value, with or without leading #)
             remove_tag          — remove tag (value, with or without leading #)
             update_description  — replace task description with value
+            add_reminder        — set reminder_time=value (YYYY-MM-DD or YYYY-MM-DD HH:mm)
+            remove_reminder     — clear reminder_time
         """
         lines = self._read_lines(file_path)
         if line_number < 1 or line_number > len(lines):
@@ -153,6 +155,7 @@ class VaultManager:
         description: str,
         tag: str = "",
         due_date: str = "",
+        reminder_time: str = "",
         priority: str = "none",
         target: str = "daily_note",
         file_path: str = "",
@@ -172,6 +175,7 @@ class VaultManager:
             "tags": [tag.lstrip("#")] if tag else [],
             "due_date": due_date,
             "done_date": "",
+            "reminder_time": reminder_time,
             "priority": priority,
         }
 
