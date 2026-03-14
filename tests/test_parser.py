@@ -261,3 +261,150 @@ def test_roundtrip_complete_task():
     assert task2 is not None
     assert task2["status"] == "complete"
     assert task2["done_date"] == "2026-03-10"
+
+
+# ---------------------------------------------------------------------------
+# parse_task_line — reminder_time (⏰)
+# ---------------------------------------------------------------------------
+
+
+def test_parse_reminder_date_only():
+    task = parse_task_line("- [ ] Task ⏰ 2026-03-15", "f.md", 1)
+    assert task is not None
+    assert task["reminder_time"] == "2026-03-15"
+
+
+def test_parse_reminder_with_time():
+    task = parse_task_line("- [ ] Task ⏰ 2026-03-15 10:00", "f.md", 1)
+    assert task is not None
+    assert task["reminder_time"] == "2026-03-15 10:00"
+
+
+def test_parse_reminder_with_due_date():
+    task = parse_task_line("- [ ] Task ⏰ 2026-03-15 10:00 📅 2026-03-16", "f.md", 1)
+    assert task is not None
+    assert task["reminder_time"] == "2026-03-15 10:00"
+    assert task["due_date"] == "2026-03-16"
+
+
+def test_parse_reminder_with_priority():
+    task = parse_task_line("- [ ] Task 🔺 ⏰ 2026-03-15 09:00 📅 2026-03-15 #tag", "f.md", 1)
+    assert task is not None
+    assert task["priority"] == "highest"
+    assert task["reminder_time"] == "2026-03-15 09:00"
+    assert task["due_date"] == "2026-03-15"
+    assert "tag" in task["tags"]
+
+
+def test_parse_no_reminder():
+    task = parse_task_line("- [ ] Task without reminder", "f.md", 1)
+    assert task is not None
+    assert task["reminder_time"] == ""
+
+
+def test_parse_reminder_not_in_description():
+    task = parse_task_line("- [ ] Task ⏰ 2026-03-15 10:00", "f.md", 1)
+    assert task is not None
+    assert "⏰" not in task["description"]
+    assert "2026-03-15" not in task["description"]
+    assert "10:00" not in task["description"]
+
+
+# ---------------------------------------------------------------------------
+# format_task_line — reminder_time
+# ---------------------------------------------------------------------------
+
+
+def test_format_with_reminder_date_only():
+    task = {
+        "status": "incomplete",
+        "description": "Task",
+        "priority": "none",
+        "reminder_time": "2026-03-15",
+        "due_date": "",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert "⏰ 2026-03-15" in line
+
+
+def test_format_with_reminder_and_due():
+    task = {
+        "status": "incomplete",
+        "description": "Task",
+        "priority": "none",
+        "reminder_time": "2026-03-15 09:00",
+        "due_date": "2026-03-15",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert "⏰ 2026-03-15 09:00" in line
+    assert "📅 2026-03-15" in line
+    # ⏰ must appear before 📅
+    assert line.index("⏰") < line.index("📅")
+
+
+def test_format_reminder_ordering():
+    """priority → ⏰ reminder → 📅 due → ✅ done → #tags"""
+    task = {
+        "status": "incomplete",
+        "description": "Review PR",
+        "priority": "highest",
+        "reminder_time": "2026-03-15 09:00",
+        "due_date": "2026-03-15",
+        "done_date": "",
+        "tags": ["work"],
+    }
+    line = format_task_line(task)
+    assert line.index("🔺") < line.index("⏰") < line.index("📅") < line.index("#work")
+
+
+def test_format_no_reminder():
+    task = {
+        "status": "incomplete",
+        "description": "Task",
+        "priority": "none",
+        "reminder_time": "",
+        "due_date": "2026-03-15",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert "⏰" not in line
+    assert "📅 2026-03-15" in line
+
+
+# ---------------------------------------------------------------------------
+# Round-trip: parse → format → parse (with reminder)
+# ---------------------------------------------------------------------------
+
+
+def test_roundtrip_with_reminder():
+    original = "- [ ] Review PR for auth module 🔺 ⏰ 2026-03-15 09:00 📅 2026-03-15 #micro-mng-todo"
+    task = parse_task_line(original, "test.md", 1)
+    assert task is not None
+    assert task["reminder_time"] == "2026-03-15 09:00"
+    reformatted = format_task_line(task)
+    assert "⏰ 2026-03-15 09:00" in reformatted
+    assert "📅 2026-03-15" in reformatted
+    task2 = parse_task_line(reformatted, "test.md", 1)
+    assert task2 is not None
+    assert task2["reminder_time"] == "2026-03-15 09:00"
+    assert task2["due_date"] == "2026-03-15"
+    assert task2["description"] == task["description"]
+    assert task2["priority"] == task["priority"]
+    assert task2["tags"] == task["tags"]
+
+
+def test_roundtrip_reminder_date_only():
+    original = "- [ ] Daily standup ⏰ 2026-03-15"
+    task = parse_task_line(original, "test.md", 1)
+    assert task is not None
+    reformatted = format_task_line(task)
+    task2 = parse_task_line(reformatted, "test.md", 1)
+    assert task2 is not None
+    assert task2["reminder_time"] == "2026-03-15"
+    assert task2["description"] == "Daily standup"
+

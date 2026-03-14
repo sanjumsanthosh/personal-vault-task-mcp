@@ -1,9 +1,10 @@
 """FastMCP server exposing Obsidian Tasks tools: list_tasks, get_daily_briefing,
-get_task_stats, create_task, update_task, delete_task, bulk_update_tasks, search_tasks."""
+get_task_stats, get_task_summary, create_task, update_task, delete_task,
+bulk_update_tasks, search_tasks."""
 
 import os
-from collections import Counter
-from datetime import date
+from collections import Counter, defaultdict
+from datetime import date, timedelta
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -19,6 +20,65 @@ vault = VaultManager(VAULT_PATH)
 mcp = FastMCP("obsidian-tasks-mcp")
 
 
+# ---------------------------------------------------------------------------
+# Grouping helper (module-level so it can be tested independently)
+# ---------------------------------------------------------------------------
+
+
+def _group_tasks(tasks: list[dict], group_by: str) -> dict[str, list[dict]]:
+    """Return *tasks* arranged into named buckets according to *group_by*.
+
+    Supported group_by values:
+        "file"      — bucket key is the vault-relative file path
+        "tag"       — each task may appear in multiple buckets (one per tag);
+                      tasks without tags appear under "untagged"
+        "priority"  — bucket key is the priority string (highest/high/…/none)
+        "date"      — bucket key is one of: overdue, today, this_week, future,
+                      no_date
+    """
+    today = date.today()
+    today_iso = today.isoformat()
+    week_end_iso = (today + timedelta(days=6)).isoformat()
+
+    groups: dict[str, list[dict]] = defaultdict(list)
+
+    for task in tasks:
+        if group_by == "file":
+            groups[task["file_path"]].append(task)
+
+        elif group_by == "tag":
+            task_tags = task.get("tags", [])
+            if task_tags:
+                for tag in task_tags:
+                    groups[tag].append(task)
+            else:
+                groups["untagged"].append(task)
+
+        elif group_by == "priority":
+            groups[task.get("priority", "none")].append(task)
+
+        elif group_by == "date":
+            due = task.get("due_date", "")
+            if not due:
+                groups["no_date"].append(task)
+            elif due < today_iso:
+                groups["overdue"].append(task)
+            elif due == today_iso:
+                groups["today"].append(task)
+            elif due <= week_end_iso:
+                groups["this_week"].append(task)
+            else:
+                groups["future"].append(task)
+
+        else:
+            raise ValueError(
+                f"Unknown group_by value: {group_by!r}. "
+                "Use 'file', 'tag', 'priority', or 'date'."
+            )
+
+    return dict(groups)
+
+
 @mcp.tool()
 def list_tasks(
     status: str = "incomplete",
@@ -26,9 +86,13 @@ def list_tasks(
     due: str = "all",
     path_includes: str = "",
     path_excludes: str = "Journal",
-    limit: int = 50,
-) -> list[dict]:
+    group_by: str = "",
+    limit: int = 200,
+) -> dict:
     """List tasks from your Obsidian vault with filters.
+
+    Always returns a dict so that ``total_count`` is visible alongside results —
+    this prevents silent truncation (the AI knows when it's seeing a partial list).
 
     Args:
         status:        Filter by completion: "all", "incomplete", or "complete".
@@ -38,26 +102,50 @@ def list_tasks(
         path_includes: Keep only tasks whose file path contains this substring.
         path_excludes: Drop tasks whose file path contains this substring
                        (defaults to "Journal" to hide daily-note noise).
-        limit:         Maximum number of tasks to return.
+        group_by:      When set, tasks are returned pre-grouped under a "groups"
+                       key instead of a flat "tasks" list.  Supported values:
+                       "file", "tag", "priority", "date".
+        limit:         Maximum number of tasks to return (applied before grouping).
     """
     tasks = vault.get_all_tasks()
-    return apply_filters(tasks, status, tags, due, path_includes, path_excludes)[:limit]
+    filtered = apply_filters(tasks, status, tags, due, path_includes, path_excludes)
+    total_count = len(filtered)
+    limited = filtered[:limit]
+
+    if group_by:
+        groups = _group_tasks(limited, group_by)
+        return {
+            "group_by": group_by,
+            "groups": groups,
+            "total_count": total_count,
+            "returned_count": len(limited),
+            "limit": limit,
+        }
+
+    return {
+        "tasks": limited,
+        "total_count": total_count,
+        "returned_count": len(limited),
+        "limit": limit,
+    }
 
 
 @mcp.tool()
 def update_task(
     file_path: str, line_number: int, operation: str, value: str = ""
 ) -> dict:
-    """Update a task in the vault — mark done, reschedule, add tag, etc.
+    """Update a task in the vault — mark done, reschedule, add reminder, etc.
 
     Args:
         file_path:   Vault-relative path, e.g. "Projects/work.md".
         line_number: 1-based line number as returned by list_tasks.
         operation:   One of: mark_done, mark_undone, add_due_date, reschedule,
-                     add_tag, remove_tag, update_description.
+                     add_tag, remove_tag, update_description,
+                     add_reminder, remove_reminder.
         value:       Depends on the operation: a date string for
                      add_due_date/reschedule, a tag name for add_tag/remove_tag,
-                     or free text for update_description.
+                     free text for update_description, or a reminder datetime
+                     (YYYY-MM-DD or YYYY-MM-DD HH:mm) for add_reminder.
     """
     return vault.update_task(file_path, line_number, operation, value)
 
@@ -67,6 +155,7 @@ def create_task(
     description: str,
     tag: str = "",
     due_date: str = "",
+    reminder_time: str = "",
     priority: str = "none",
     target: str = "daily_note",
     file_path: str = "",
@@ -74,14 +163,17 @@ def create_task(
     """Create a new task and append it to a file in your vault.
 
     Args:
-        description: The task text.
-        tag:         Optional inline tag (e.g. "micro-mng-todo").
-        due_date:    Optional due date in YYYY-MM-DD format.
-        priority:    "highest", "high", "medium", "low", or "none".
-        target:      Where to write the task — "daily_note", "inbox", or "file".
-        file_path:   Required when target="file"; vault-relative path.
+        description:   The task text.
+        tag:           Optional inline tag (e.g. "micro-mng-todo").
+        due_date:      Optional due date in YYYY-MM-DD format.
+        reminder_time: Optional reminder datetime for the Reminder plugin
+                       (e.g. "2026-03-15" or "2026-03-15 09:00").  Written as
+                       ⏰ YYYY-MM-DD HH:mm immediately before 📅 in the task line.
+        priority:      "highest", "high", "medium", "low", or "none".
+        target:        Where to write the task — "daily_note", "inbox", or "file".
+        file_path:     Required when target="file"; vault-relative path.
     """
-    return vault.create_task(description, tag, due_date, priority, target, file_path)
+    return vault.create_task(description, tag, due_date, reminder_time, priority, target, file_path)
 
 
 @mcp.tool()
@@ -102,6 +194,48 @@ def get_daily_briefing() -> dict:
         "overdue_count": len(overdue_tasks),
         "today_tasks": today_tasks,
         "overdue_tasks": overdue_tasks,
+    }
+
+
+@mcp.tool()
+def get_task_summary(
+    status: str = "incomplete",
+    group_by: str = "file",
+    tags: list[str] = [],
+    due: str = "all",
+    path_includes: str = "",
+    path_excludes: str = "Journal",
+) -> dict:
+    """Return a structured summary of tasks, pre-grouped and counted server-side.
+
+    This tool is purpose-built for the "show me all my tasks organised" use case.
+    Unlike list_tasks it always returns grouped output — no limit is applied so
+    counts are always accurate.
+
+    Args:
+        status:        Filter by completion: "all", "incomplete", or "complete".
+        group_by:      How to organise tasks: "file", "tag", "priority", or "date".
+        tags:          Only tasks that have at least one of these tags.
+        due:           Due-date filter: "today", "overdue", "this_week",
+                       "no_date", "has_date", or "all".
+        path_includes: Keep only tasks whose file path contains this substring.
+        path_excludes: Drop tasks whose file path contains this substring
+                       (defaults to "Journal" to hide daily-note noise).
+    """
+    tasks = vault.get_all_tasks()
+    filtered = apply_filters(tasks, status, tags, due, path_includes, path_excludes)
+    groups = _group_tasks(filtered, group_by)
+
+    group_summaries = {
+        key: {"count": len(group_tasks), "tasks": group_tasks}
+        for key, group_tasks in groups.items()
+    }
+
+    return {
+        "group_by": group_by,
+        "total_count": len(filtered),
+        "group_count": len(groups),
+        "groups": group_summaries,
     }
 
 
@@ -214,8 +348,10 @@ def bulk_update_tasks(
                         or "all".
         filter_tag:     Tag filter for auto-selection (optional).
         operation:      One of: mark_done, mark_undone, add_due_date, reschedule,
-                        add_tag, remove_tag, update_description.
-        value:          Argument for the operation (e.g. a date or tag name).
+                        add_tag, remove_tag, update_description,
+                        add_reminder, remove_reminder.
+        value:          Argument for the operation (e.g. a date, tag name, or
+                        reminder datetime YYYY-MM-DD HH:mm).
         dry_run:        When True, return a preview without writing changes.
     """
     resolved_ids = list(task_ids) if task_ids else []

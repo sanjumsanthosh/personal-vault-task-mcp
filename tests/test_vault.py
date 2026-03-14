@@ -257,6 +257,96 @@ def test_create_task_unknown_target(vault: VaultManager):
 
 
 # ---------------------------------------------------------------------------
+# create_task — reminder_time
+# ---------------------------------------------------------------------------
+
+
+def test_create_task_with_reminder_date(vault: VaultManager):
+    result = vault.create_task("Reminder task", reminder_time="2026-04-15", target="inbox")
+    assert result["reminder_time"] == "2026-04-15"
+    content = (vault.vault_path / "Inbox.md").read_text(encoding="utf-8")
+    assert "⏰ 2026-04-15" in content
+
+
+def test_create_task_with_reminder_datetime(vault: VaultManager):
+    result = vault.create_task("Stand-up", reminder_time="2026-04-15 09:00", target="inbox")
+    assert result["reminder_time"] == "2026-04-15 09:00"
+    content = (vault.vault_path / "Inbox.md").read_text(encoding="utf-8")
+    assert "⏰ 2026-04-15 09:00" in content
+
+
+def test_create_task_reminder_before_due_date(vault: VaultManager):
+    result = vault.create_task(
+        "Task with reminder and due",
+        reminder_time="2026-04-15 09:00",
+        due_date="2026-04-16",
+        target="inbox",
+    )
+    content = (vault.vault_path / "Inbox.md").read_text(encoding="utf-8")
+    assert content.index("⏰") < content.index("📅")
+
+
+# ---------------------------------------------------------------------------
+# update_task — add_reminder / remove_reminder
+# ---------------------------------------------------------------------------
+
+
+def test_update_add_reminder(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    updated = vault.update_task(task["file_path"], task["line_number"], "add_reminder", "2026-04-01 08:00")
+    assert updated["reminder_time"] == "2026-04-01 08:00"
+
+
+def test_update_add_reminder_persisted(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    vault.update_task(task["file_path"], task["line_number"], "add_reminder", "2026-04-01 08:00")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == task["file_path"] and t["line_number"] == task["line_number"]
+    )
+    assert found["reminder_time"] == "2026-04-01 08:00"
+    # ⏰ must appear before 📅 in the raw line
+    lines = (vault.vault_path / task["file_path"]).read_text(encoding="utf-8").splitlines()
+    raw = lines[task["line_number"] - 1]
+    assert "⏰ 2026-04-01 08:00" in raw
+
+
+def test_update_add_reminder_date_only(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    updated = vault.update_task(task["file_path"], task["line_number"], "add_reminder", "2026-04-01")
+    assert updated["reminder_time"] == "2026-04-01"
+
+
+def test_update_remove_reminder(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    # First add a reminder, then remove it
+    vault.update_task(task["file_path"], task["line_number"], "add_reminder", "2026-04-01 08:00")
+    updated = vault.update_task(task["file_path"], task["line_number"], "remove_reminder")
+    assert updated["reminder_time"] == ""
+
+
+def test_update_remove_reminder_persisted(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    vault.update_task(task["file_path"], task["line_number"], "add_reminder", "2026-04-01 08:00")
+    vault.update_task(task["file_path"], task["line_number"], "remove_reminder")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == task["file_path"] and t["line_number"] == task["line_number"]
+    )
+    assert found["reminder_time"] == ""
+    lines = (vault.vault_path / task["file_path"]).read_text(encoding="utf-8").splitlines()
+    raw = lines[task["line_number"] - 1]
+    assert "⏰" not in raw
+
+
+# ---------------------------------------------------------------------------
 # delete_task — dry_run
 # ---------------------------------------------------------------------------
 

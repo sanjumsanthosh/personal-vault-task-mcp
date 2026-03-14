@@ -3,6 +3,11 @@
 Handles the emoji-based syntax used by the Obsidian Tasks plugin:
   - [ ] Description 🔺 📅 2026-03-15 #tag
   - [x] Done task ✅ 2026-03-14
+
+Also handles the Reminder plugin ⏰ syntax:
+  - [ ] Task ⏰ 2026-03-15        (reminder on that date at default time)
+  - [ ] Task ⏰ 2026-03-15 10:00  (reminder at specific time)
+  - [ ] Task 🔺 ⏰ 2026-03-15 09:00 📅 2026-03-15 #tag
 """
 
 import re
@@ -15,6 +20,9 @@ TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.+)$")
 DUE_DATE_PATTERN = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
 DONE_DATE_PATTERN = re.compile(r"✅\s*(\d{4}-\d{2}-\d{2})")
 SCHEDULED_DATE_PATTERN = re.compile(r"⏳\s*(\d{4}-\d{2}-\d{2})")
+
+# Reminder plugin ⏰ pattern: date only, or date + HH:mm time
+REMINDER_PATTERN = re.compile(r"⏰\s*(\d{4}-\d{2}-\d{2}(?:\s+\d{2}:\d{2})?)")
 
 # Tags: #word-with-hyphens or #word/with/slashes, not starting with digit
 TAG_PATTERN = re.compile(r"(?<![&\w])#([A-Za-z_][A-Za-z0-9_/\-]*)")
@@ -59,7 +67,7 @@ def parse_task_line(
 
     The returned dict has keys:
         id, description, status, tags, due_date, done_date,
-        priority, file_path, line_number
+        reminder_time, priority, file_path, line_number
     """
     match = TASK_LINE_PATTERN.match(line)
     if not match:
@@ -75,6 +83,10 @@ def parse_task_line(
     # Extract done date
     done_match = DONE_DATE_PATTERN.search(content)
     done_date = done_match.group(1) if done_match else ""
+
+    # Extract reminder time (⏰ YYYY-MM-DD or ⏰ YYYY-MM-DD HH:mm)
+    reminder_match = REMINDER_PATTERN.search(content)
+    reminder_time = reminder_match.group(1).strip() if reminder_match else ""
 
     # Extract priority (first matching emoji wins)
     priority = "none"
@@ -94,6 +106,9 @@ def parse_task_line(
     description = DUE_DATE_PATTERN.sub("", description)
     description = DONE_DATE_PATTERN.sub("", description)
     description = SCHEDULED_DATE_PATTERN.sub("", description)
+    description = REMINDER_PATTERN.sub("", description)
+    # Strip the ⏰ emoji itself (in case it remained after regex sub)
+    description = description.replace("⏰", "")
     for emoji in EMOJI_TO_PRIORITY:
         description = description.replace(emoji, "")
     description = TAG_PATTERN.sub("", description)
@@ -107,6 +122,7 @@ def parse_task_line(
         "wikilinks": wikilinks,
         "due_date": due_date,
         "done_date": done_date,
+        "reminder_time": reminder_time,
         "priority": priority,
         "file_path": file_path,
         "line_number": line_number,
@@ -116,7 +132,10 @@ def parse_task_line(
 def format_task_line(task: dict) -> str:
     """Serialise a task dict back to an Obsidian Tasks plugin markdown line.
 
-    Output order: - [status] description [priority] [📅 due] [✅ done] [#tags]
+    Output order: - [status] description [priority] [⏰ reminder] [📅 due] [✅ done] [#tags]
+
+    The ⏰ reminder is placed immediately before 📅 due date (if both are present)
+    to comply with the Reminder plugin's parsing requirements.
     """
     status_char = "x" if task.get("status") == "complete" else " "
 
@@ -127,6 +146,10 @@ def format_task_line(task: dict) -> str:
         emoji = PRIORITY_TO_EMOJI.get(priority, "")
         if emoji:
             parts.append(emoji)
+
+    reminder_time = task.get("reminder_time", "")
+    if reminder_time:
+        parts.append(f"⏰ {reminder_time}")
 
     due_date = task.get("due_date", "")
     if due_date:
