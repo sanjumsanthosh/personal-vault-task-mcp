@@ -19,6 +19,9 @@ SCHEDULED_DATE_PATTERN = re.compile(r"⏳\s*(\d{4}-\d{2}-\d{2})")
 # Tags: #word-with-hyphens or #word/with/slashes, not starting with digit
 TAG_PATTERN = re.compile(r"(?<![&\w])#([A-Za-z_][A-Za-z0-9_/\-]*)")
 
+# Wikilinks: [[link text]] or [[link|alias]]
+WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
+
 # Priority emoji mappings (Obsidian Tasks plugin standard)
 # Each entry: (tuple of emoji variants, priority name)
 _PRIORITY_ENTRIES: list[tuple[tuple[str, ...], str]] = [
@@ -83,6 +86,9 @@ def parse_task_line(
     # Extract inline tags
     tags = TAG_PATTERN.findall(content)
 
+    # Extract wikilinks [[target]] or [[target|alias]]
+    wikilinks = WIKILINK_PATTERN.findall(content)
+
     # Build description: strip all known emoji markers and tags
     description = content
     description = DUE_DATE_PATTERN.sub("", description)
@@ -98,6 +104,7 @@ def parse_task_line(
         "description": description,
         "status": status,
         "tags": tags,
+        "wikilinks": wikilinks,
         "due_date": due_date,
         "done_date": done_date,
         "priority": priority,

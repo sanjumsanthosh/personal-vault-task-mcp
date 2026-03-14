@@ -254,3 +254,199 @@ def test_create_task_with_priority(vault: VaultManager):
 def test_create_task_unknown_target(vault: VaultManager):
     with pytest.raises(ValueError, match="Unknown target"):
         vault.create_task("Task", target="invalid_target")
+
+
+# ---------------------------------------------------------------------------
+# delete_task — dry_run
+# ---------------------------------------------------------------------------
+
+
+def test_delete_task_dry_run(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    result = vault.delete_task(task["file_path"], task["line_number"], dry_run=True)
+    assert result["dry_run"] is True
+    assert result["line_number"] == task["line_number"]
+    # File must be unchanged
+    after = vault.get_all_tasks()
+    assert len(after) == len(tasks)
+
+
+def test_delete_task_dry_run_returns_task_content(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    result = vault.delete_task(task["file_path"], task["line_number"], dry_run=True)
+    assert task["description"] in result["would_delete"]
+
+
+# ---------------------------------------------------------------------------
+# delete_task — actual deletion
+# ---------------------------------------------------------------------------
+
+
+def test_delete_task_removes_line(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    vault.delete_task(task["file_path"], task["line_number"])
+    after = vault.get_all_tasks()
+    # One fewer task should exist overall
+    assert len(after) == len(tasks) - 1
+    # The specific task description should no longer exist in that file
+    descriptions_in_file = {
+        t["description"] for t in after if t["file_path"] == task["file_path"]
+    }
+    assert task["description"] not in descriptions_in_file
+
+
+def test_delete_task_returns_confirmation(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    result = vault.delete_task(task["file_path"], task["line_number"])
+    assert "deleted" in result
+    assert result["file"] == task["file_path"]
+    assert result["line_number"] == task["line_number"]
+
+
+def test_delete_task_no_consecutive_blank_lines(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["status"] == "incomplete")
+    vault.delete_task(task["file_path"], task["line_number"])
+    content = (vault.vault_path / task["file_path"]).read_text(encoding="utf-8")
+    assert "\n\n\n" not in content
+
+
+# ---------------------------------------------------------------------------
+# delete_task — error cases
+# ---------------------------------------------------------------------------
+
+
+def test_delete_task_invalid_line_number(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = tasks[0]
+    with pytest.raises(ValueError, match="out of range"):
+        vault.delete_task(task["file_path"], 99999)
+
+
+def test_delete_task_non_task_line(vault: VaultManager):
+    with pytest.raises(ValueError, match="not a task line"):
+        vault.delete_task("Projects/work.md", 1)  # heading line
+
+
+def test_delete_task_path_traversal(vault: VaultManager):
+    with pytest.raises(ValueError, match="Path outside vault"):
+        vault.delete_task("../../etc/passwd", 1)
+
+
+# ---------------------------------------------------------------------------
+# bulk_update_tasks — dry_run
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_update_dry_run(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    incomplete = [t for t in tasks if t["status"] == "incomplete"][:2]
+    ids = [t["id"] for t in incomplete]
+    result = vault.bulk_update_tasks(ids, "mark_done", dry_run=True)
+    assert result["dry_run"] is True
+    assert result["would_update_count"] == 2
+    # No changes written
+    after = vault.get_all_tasks()
+    assert sum(1 for t in after if t["status"] == "incomplete") == sum(
+        1 for t in tasks if t["status"] == "incomplete"
+    )
+
+
+# ---------------------------------------------------------------------------
+# bulk_update_tasks — actual updates
+# ---------------------------------------------------------------------------
+
+
+def test_bulk_update_mark_done(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    incomplete = [t for t in tasks if t["status"] == "incomplete"]
+    ids = [t["id"] for t in incomplete]
+    result = vault.bulk_update_tasks(ids, "mark_done")
+    assert result["updated_count"] == len(incomplete)
+    assert result["failed_count"] == 0
+    after = vault.get_all_tasks()
+    assert all(t["status"] == "complete" for t in after)
+
+
+def test_bulk_update_multiple_files(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    incomplete = [t for t in tasks if t["status"] == "incomplete"]
+    ids = [t["id"] for t in incomplete]
+    result = vault.bulk_update_tasks(ids, "mark_done")
+    assert result["updated_count"] > 0
+
+
+def test_bulk_update_add_tag(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    ids = [t["id"] for t in tasks if "bulk-tag" not in t["tags"]][:3]
+    vault.bulk_update_tasks(ids, "add_tag", "bulk-tag")
+    after = vault.get_all_tasks()
+    updated = [t for t in after if t["id"] in ids]
+    for t in updated:
+        assert "bulk-tag" in t["tags"]
+
+
+def test_bulk_update_empty_task_ids(vault: VaultManager):
+    result = vault.bulk_update_tasks([], "mark_done")
+    assert "message" in result
+
+
+def test_bulk_update_handles_missing_file(vault: VaultManager):
+    result = vault.bulk_update_tasks(["nonexistent/file.md:1"], "mark_done")
+    assert result["failed_count"] == 1
+    assert result["failed"][0]["reason"] == "file not found"
+
+
+def test_bulk_update_handles_line_out_of_range(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = tasks[0]
+    result = vault.bulk_update_tasks([f"{task['file_path']}:99999"], "mark_done")
+    assert result["failed_count"] == 1
+
+
+def test_bulk_update_handles_non_task_line(vault: VaultManager):
+    result = vault.bulk_update_tasks(["Projects/work.md:1"], "mark_done")
+    assert result["failed_count"] == 1
+    assert result["failed"][0]["reason"] == "not a task line"
+
+
+# ---------------------------------------------------------------------------
+# _group_by_file
+# ---------------------------------------------------------------------------
+
+
+def test_group_by_file_descending_order():
+    task_ids = [
+        "Projects/work.md:5",
+        "Projects/work.md:10",
+        "Journal/2026-03-14.md:7",
+    ]
+    grouped = VaultManager._group_by_file(task_ids)
+    assert grouped["Projects/work.md"] == [10, 5]
+    assert grouped["Journal/2026-03-14.md"] == [7]
+
+
+def test_group_by_file_ignores_malformed():
+    grouped = VaultManager._group_by_file(["bad-id-no-colon"])
+    assert len(grouped) == 0
+
+
+# ---------------------------------------------------------------------------
+# _clean_blank_lines
+# ---------------------------------------------------------------------------
+
+
+def test_clean_blank_lines_removes_consecutive():
+    lines = ["a", "", "", "b"]
+    result = VaultManager._clean_blank_lines(lines)
+    assert result == ["a", "", "b"]
+
+
+def test_clean_blank_lines_keeps_single():
+    lines = ["a", "", "b"]
+    result = VaultManager._clean_blank_lines(lines)
+    assert result == ["a", "", "b"]
