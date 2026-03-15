@@ -10,6 +10,8 @@ def apply_filters(
     due: str = "all",
     path_includes: str = "",
     path_excludes: str = "Journal",
+    due_from: str = "",
+    due_to: str = "",
 ) -> list[dict]:
     """Apply multiple filters to a flat list of task dicts.
 
@@ -24,6 +26,10 @@ def apply_filters(
                         this substring (case-sensitive).
         path_excludes:  If non-empty, drop tasks whose ``file_path`` contains this
                         substring (case-sensitive).  Defaults to ``"Journal"``.
+        due_from:       If non-empty (``YYYY-MM-DD``), keep only tasks whose
+                        ``due_date`` is on or after this date.
+        due_to:         If non-empty (``YYYY-MM-DD``), keep only tasks whose
+                        ``due_date`` is on or before this date.
 
     Returns:
         Filtered list of task dicts (same objects, not copies).
@@ -41,10 +47,16 @@ def apply_filters(
     if tags:
         result = [t for t in result if any(tag in t["tags"] for tag in tags)]
 
-    # --- due date ---
+    # --- due date bucket ---
     if due != "all":
         today = date.today()
         result = _filter_by_due(result, due, today)
+
+    # --- due date range ---
+    if due_from:
+        result = [t for t in result if t.get("due_date", "") and t.get("due_date", "") >= due_from]
+    if due_to:
+        result = [t for t in result if t.get("due_date", "") and t.get("due_date", "") <= due_to]
 
     # --- path filters ---
     if path_includes:
