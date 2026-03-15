@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from obsidian_tasks_mcp.server import _group_tasks, _matches_query, _score_match
+from obsidian_tasks_mcp.server import _group_tasks, _matches_query, _score_match, get_daily_briefing
 
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "sample_vault"
@@ -203,4 +203,32 @@ def test_group_empty_tasks():
     assert _group_tasks([], "tag") == {}
     assert _group_tasks([], "priority") == {}
     assert _group_tasks([], "date") == {}
+
+
+# ---------------------------------------------------------------------------
+# get_daily_briefing — day_of_week and week_number fields
+# ---------------------------------------------------------------------------
+
+
+def test_daily_briefing_includes_day_of_week(tmp_path, monkeypatch):
+    """get_daily_briefing() should include a human-readable day name."""
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    result = get_daily_briefing()
+    today = date.today()
+    assert result["day_of_week"] == today.strftime("%A")
+
+
+def test_daily_briefing_includes_week_number(tmp_path, monkeypatch):
+    """get_daily_briefing() should include the ISO week number."""
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    result = get_daily_briefing()
+    today = date.today()
+    assert result["week_number"] == today.isocalendar()[1]
+
+
+def test_daily_briefing_date_field(tmp_path, monkeypatch):
+    """get_daily_briefing() date field should match today's ISO date."""
+    monkeypatch.setenv("VAULT_PATH", str(tmp_path))
+    result = get_daily_briefing()
+    assert result["date"] == date.today().isoformat()
 
