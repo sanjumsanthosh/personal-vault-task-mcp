@@ -183,13 +183,18 @@ def get_daily_briefing() -> dict:
     Includes tasks from all files (Journal and non-Journal) so nothing is missed.
     """
     tasks = vault.get_all_tasks()
-    today_iso = date.today().isoformat()
+    today = date.today()
+    today_iso = today.isoformat()
+    day_of_week = today.strftime("%A")
+    week_number = today.isocalendar()[1]
 
     today_tasks = apply_filters(tasks, "incomplete", [], "today", "", "")
     overdue_tasks = apply_filters(tasks, "incomplete", [], "overdue", "", "")
 
     return {
         "date": today_iso,
+        "day_of_week": day_of_week,
+        "week_number": week_number,
         "today_count": len(today_tasks),
         "overdue_count": len(overdue_tasks),
         "today_tasks": today_tasks,
