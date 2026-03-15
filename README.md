@@ -79,22 +79,35 @@ list_tasks(
     path_includes="",        # e.g. "Projects" — filter by folder
     path_excludes="Journal", # default excludes journal noise
     group_by="",             # "file" | "tag" | "priority" | "date" — omit for flat list
-    limit=200
+    limit=200,
+    due_from="",             # YYYY-MM-DD — keep tasks with due date on or after this date
+    due_to="",               # YYYY-MM-DD — keep tasks with due date on or before this date
 )
 ```
 
-Always returns a **dict** (not a list) so `total_count` is always visible:
+Always returns a **dict** (not a list) so `total_count` is always visible.  ISO week context fields (`date`, `week_number`, `iso_year`, `weekday`) are always included:
 
 ```json
 // Without group_by
-{ "tasks": [...], "total_count": 42, "returned_count": 42, "limit": 200 }
+{ "date": "2026-03-15", "week_number": 11, "iso_year": 2026, "weekday": 7, "tasks": [...], "total_count": 42, "returned_count": 42, "limit": 200 }
 
 // With group_by="file"
-{ "group_by": "file", "groups": { "Projects/work.md": [...] }, "total_count": 42, "returned_count": 42, "limit": 200 }
+{ "date": "2026-03-15", "week_number": 11, "iso_year": 2026, "weekday": 7, "group_by": "file", "groups": { "Projects/work.md": [...] }, "total_count": 42, "returned_count": 42, "limit": 200 }
 ```
 
 `group_by` date buckets: `overdue`, `today`, `this_week`, `future`, `no_date`.  
 `group_by` tag: tasks with no tags appear under `"untagged"`.
+
+`due_from` / `due_to` support precise date-range queries (e.g. "tasks missed yesterday"):
+
+```python
+# Tasks missed yesterday
+list_tasks(due_from="2026-03-14", due_to="2026-03-14", status="incomplete")
+# Tasks due in the next 3 days
+list_tasks(due_from="2026-03-15", due_to="2026-03-18")
+```
+
+Tasks without a due date are **excluded** when `due_from` or `due_to` is specified.
 
 ### `update_task`
 
@@ -147,7 +160,7 @@ get_daily_briefing()
 
 Returns today's due tasks and all overdue incomplete tasks. Unlike `list_tasks` and `search_tasks`, this tool searches across **all** files — including Journal files — so no tasks are missed.
 
-**Response fields:** `date`, `today_count`, `today_tasks`, `overdue_count`, `overdue_tasks`
+**Response fields:** `date`, `week_number`, `iso_year`, `weekday`, `today_count`, `today_tasks`, `overdue_count`, `overdue_tasks`
 
 ### `get_task_stats`
 
@@ -168,14 +181,20 @@ get_task_summary(
     tags=[],                 # optional tag pre-filter
     due="all",               # optional due-date pre-filter
     path_includes="",
-    path_excludes="Journal"
+    path_excludes="Journal",
+    due_from="",             # YYYY-MM-DD — keep tasks with due date on or after this date
+    due_to="",               # YYYY-MM-DD — keep tasks with due date on or before this date
 )
 ```
 
-Purpose-built for the **"show me all my tasks organised"** use case. Unlike `list_tasks` no item limit is applied — counts are always accurate. Each group contains a `count` and the full `tasks` list:
+Purpose-built for the **"show me all my tasks organised"** use case. Unlike `list_tasks` no item limit is applied — counts are always accurate. ISO week context fields are always included. Each group contains a `count` and the full `tasks` list:
 
 ```json
 {
+  "date": "2026-03-15",
+  "week_number": 11,
+  "iso_year": 2026,
+  "weekday": 7,
   "group_by": "file",
   "total_count": 42,
   "group_count": 5,
@@ -188,6 +207,8 @@ Purpose-built for the **"show me all my tasks organised"** use case. Unlike `lis
 
 `group_by` date buckets: `overdue`, `today`, `this_week`, `future`, `no_date`.  
 `group_by` tag: tasks with no tags appear under `"untagged"`.
+
+`due_from` / `due_to` work the same as in `list_tasks` — tasks without a due date are excluded when either is set.
 
 ### `delete_task`
 

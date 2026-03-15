@@ -3,6 +3,7 @@
 import shutil
 from datetime import date, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -203,4 +204,148 @@ def test_group_empty_tasks():
     assert _group_tasks([], "tag") == {}
     assert _group_tasks([], "priority") == {}
     assert _group_tasks([], "date") == {}
+
+
+# ---------------------------------------------------------------------------
+# ISO week number fields in server tool responses
+# ---------------------------------------------------------------------------
+
+
+def _make_task(due_date: str = "", status: str = "incomplete") -> dict:
+    """Minimal task dict for use in server function tests."""
+    return {
+        "id": "Projects/work.md:1",
+        "description": "Test task",
+        "status": status,
+        "tags": [],
+        "wikilinks": [],
+        "due_date": due_date,
+        "done_date": "",
+        "reminder_time": "",
+        "priority": "none",
+        "file_path": "Projects/work.md",
+        "line_number": 1,
+    }
+
+
+def test_list_tasks_returns_week_fields():
+    """list_tasks response must include week_number, iso_year, weekday."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    cal = today.isocalendar()
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[_make_task()]):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="")
+    assert result["week_number"] == cal.week
+    assert result["iso_year"] == cal.year
+    assert result["weekday"] == cal.weekday
+    assert result["date"] == today.isoformat()
+
+
+def test_list_tasks_grouped_returns_week_fields():
+    """list_tasks with group_by must also include week_number."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    cal = today.isocalendar()
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[_make_task()]):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="", group_by="file")
+    assert result["week_number"] == cal.week
+    assert result["iso_year"] == cal.year
+    assert result["weekday"] == cal.weekday
+
+
+def test_get_daily_briefing_returns_week_fields():
+    """get_daily_briefing response must include week_number, iso_year, weekday."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    cal = today.isocalendar()
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[]):
+        from obsidian_tasks_mcp.server import get_daily_briefing
+
+        result = get_daily_briefing()
+    assert result["week_number"] == cal.week
+    assert result["iso_year"] == cal.year
+    assert result["weekday"] == cal.weekday
+    assert result["date"] == today.isoformat()
+
+
+def test_get_task_summary_returns_week_fields():
+    """get_task_summary response must include week_number, iso_year, weekday."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    cal = today.isocalendar()
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[_make_task()]):
+        from obsidian_tasks_mcp.server import get_task_summary
+
+        result = get_task_summary(status="all", group_by="file", path_excludes="")
+    assert result["week_number"] == cal.week
+    assert result["iso_year"] == cal.year
+    assert result["weekday"] == cal.weekday
+    assert result["date"] == today.isoformat()
+
+
+def test_list_tasks_due_from_filter():
+    """list_tasks must forward due_from to apply_filters."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    tomorrow = (today + timedelta(days=1)).isoformat()
+    future = (today + timedelta(days=5)).isoformat()
+
+    tasks = [_make_task(today.isoformat()), _make_task(future)]
+    with patch.object(srv.vault, "get_all_tasks", return_value=tasks):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="", due_from=tomorrow)
+    assert all(t["due_date"] >= tomorrow for t in result["tasks"])
+    assert result["total_count"] == 1
+
+
+def test_list_tasks_due_to_filter():
+    """list_tasks must forward due_to to apply_filters."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    future = (today + timedelta(days=5)).isoformat()
+
+    tasks = [_make_task(yesterday), _make_task(future)]
+    with patch.object(srv.vault, "get_all_tasks", return_value=tasks):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="", due_to=today.isoformat())
+    assert all(t["due_date"] <= today.isoformat() for t in result["tasks"])
+    assert result["total_count"] == 1
+
+
+def test_get_task_summary_due_range_filter():
+    """get_task_summary must forward due_from/due_to to apply_filters."""
+    import obsidian_tasks_mcp.server as srv
+
+    today = date.today()
+    yesterday = (today - timedelta(days=1)).isoformat()
+    future = (today + timedelta(days=5)).isoformat()
+
+    tasks = [_make_task(yesterday), _make_task(future)]
+    with patch.object(srv.vault, "get_all_tasks", return_value=tasks):
+        from obsidian_tasks_mcp.server import get_task_summary
+
+        result = get_task_summary(
+            status="all",
+            group_by="file",
+            path_excludes="",
+            due_from=today.isoformat(),
+        )
+    assert result["total_count"] == 1
 

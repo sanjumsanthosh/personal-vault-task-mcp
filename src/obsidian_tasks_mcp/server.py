@@ -88,6 +88,8 @@ def list_tasks(
     path_excludes: str = "Journal",
     group_by: str = "",
     limit: int = 200,
+    due_from: str = "",
+    due_to: str = "",
 ) -> dict:
     """List tasks from your Obsidian vault with filters.
 
@@ -106,15 +108,28 @@ def list_tasks(
                        key instead of a flat "tasks" list.  Supported values:
                        "file", "tag", "priority", "date".
         limit:         Maximum number of tasks to return (applied before grouping).
+        due_from:      Keep only tasks with a due date on or after this date
+                       (YYYY-MM-DD).  Tasks without a due date are excluded.
+        due_to:        Keep only tasks with a due date on or before this date
+                       (YYYY-MM-DD).  Tasks without a due date are excluded.
     """
+    today = date.today()
+    cal = today.isocalendar()
+
     tasks = vault.get_all_tasks()
-    filtered = apply_filters(tasks, status, tags, due, path_includes, path_excludes)
+    filtered = apply_filters(
+        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to
+    )
     total_count = len(filtered)
     limited = filtered[:limit]
 
     if group_by:
         groups = _group_tasks(limited, group_by)
         return {
+            "date": today.isoformat(),
+            "week_number": cal.week,
+            "iso_year": cal.year,
+            "weekday": cal.weekday,
             "group_by": group_by,
             "groups": groups,
             "total_count": total_count,
@@ -123,6 +138,10 @@ def list_tasks(
         }
 
     return {
+        "date": today.isoformat(),
+        "week_number": cal.week,
+        "iso_year": cal.year,
+        "weekday": cal.weekday,
         "tasks": limited,
         "total_count": total_count,
         "returned_count": len(limited),
@@ -183,13 +202,18 @@ def get_daily_briefing() -> dict:
     Includes tasks from all files (Journal and non-Journal) so nothing is missed.
     """
     tasks = vault.get_all_tasks()
-    today_iso = date.today().isoformat()
+    today = date.today()
+    today_iso = today.isoformat()
+    cal = today.isocalendar()
 
     today_tasks = apply_filters(tasks, "incomplete", [], "today", "", "")
     overdue_tasks = apply_filters(tasks, "incomplete", [], "overdue", "", "")
 
     return {
         "date": today_iso,
+        "week_number": cal.week,
+        "iso_year": cal.year,
+        "weekday": cal.weekday,
         "today_count": len(today_tasks),
         "overdue_count": len(overdue_tasks),
         "today_tasks": today_tasks,
@@ -205,6 +229,8 @@ def get_task_summary(
     due: str = "all",
     path_includes: str = "",
     path_excludes: str = "Journal",
+    due_from: str = "",
+    due_to: str = "",
 ) -> dict:
     """Return a structured summary of tasks, pre-grouped and counted server-side.
 
@@ -221,9 +247,18 @@ def get_task_summary(
         path_includes: Keep only tasks whose file path contains this substring.
         path_excludes: Drop tasks whose file path contains this substring
                        (defaults to "Journal" to hide daily-note noise).
+        due_from:      Keep only tasks with a due date on or after this date
+                       (YYYY-MM-DD).  Tasks without a due date are excluded.
+        due_to:        Keep only tasks with a due date on or before this date
+                       (YYYY-MM-DD).  Tasks without a due date are excluded.
     """
+    today = date.today()
+    cal = today.isocalendar()
+
     tasks = vault.get_all_tasks()
-    filtered = apply_filters(tasks, status, tags, due, path_includes, path_excludes)
+    filtered = apply_filters(
+        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to
+    )
     groups = _group_tasks(filtered, group_by)
 
     group_summaries = {
@@ -232,6 +267,10 @@ def get_task_summary(
     }
 
     return {
+        "date": today.isoformat(),
+        "week_number": cal.week,
+        "iso_year": cal.year,
+        "weekday": cal.weekday,
         "group_by": group_by,
         "total_count": len(filtered),
         "group_count": len(groups),

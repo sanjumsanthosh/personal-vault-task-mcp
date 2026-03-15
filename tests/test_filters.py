@@ -223,3 +223,65 @@ def test_default_filters_exclude_journal_and_incomplete():
     result = apply_filters(SAMPLE_TASKS)  # status="incomplete", path_excludes="Journal"
     assert all(t["status"] == "incomplete" for t in result)
     assert not any("Journal" in t["file_path"] for t in result)
+
+
+# ---------------------------------------------------------------------------
+# due_from / due_to range filters
+# ---------------------------------------------------------------------------
+
+
+def test_filter_due_from_excludes_earlier_and_no_date():
+    result = apply_filters(SAMPLE_TASKS, status="all", due_from=TOMORROW, path_excludes="")
+    # Only tasks with due_date >= TOMORROW
+    assert all(t["due_date"] >= TOMORROW for t in result)
+    assert all(t["due_date"] != "" for t in result)
+
+
+def test_filter_due_to_excludes_later_and_no_date():
+    result = apply_filters(SAMPLE_TASKS, status="all", due_to=YESTERDAY, path_excludes="")
+    # Only tasks with due_date <= YESTERDAY
+    assert all(t["due_date"] <= YESTERDAY for t in result)
+    assert all(t["due_date"] != "" for t in result)
+
+
+def test_filter_due_from_and_due_to_range():
+    result = apply_filters(
+        SAMPLE_TASKS,
+        status="all",
+        due_from=YESTERDAY,
+        due_to=IN_5_DAYS,
+        path_excludes="",
+    )
+    # Only tasks with due_date in [YESTERDAY, IN_5_DAYS]
+    assert all(t["due_date"] >= YESTERDAY and t["due_date"] <= IN_5_DAYS for t in result)
+    assert all(t["due_date"] != "" for t in result)
+
+
+def test_filter_due_from_equal_boundary_included():
+    result = apply_filters(SAMPLE_TASKS, status="all", due_from=TODAY_ISO, path_excludes="")
+    assert all(t["due_date"] >= TODAY_ISO for t in result)
+    today_tasks = [t for t in result if t["due_date"] == TODAY_ISO]
+    assert len(today_tasks) == 2  # two tasks due today
+
+
+def test_filter_due_to_equal_boundary_included():
+    result = apply_filters(SAMPLE_TASKS, status="all", due_to=TODAY_ISO, path_excludes="")
+    assert all(t["due_date"] <= TODAY_ISO for t in result)
+
+
+def test_filter_due_from_no_match_returns_empty():
+    far_future = (TODAY + timedelta(days=9999)).isoformat()
+    result = apply_filters(SAMPLE_TASKS, status="all", due_from=far_future, path_excludes="")
+    assert result == []
+
+
+def test_filter_due_range_combined_with_status():
+    result = apply_filters(
+        SAMPLE_TASKS,
+        status="incomplete",
+        due_from=TODAY_ISO,
+        due_to=IN_5_DAYS,
+        path_excludes="",
+    )
+    assert all(t["status"] == "incomplete" for t in result)
+    assert all(TODAY_ISO <= t["due_date"] <= IN_5_DAYS for t in result)
