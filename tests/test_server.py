@@ -211,12 +211,13 @@ def test_group_empty_tasks():
 # ---------------------------------------------------------------------------
 
 
-def _make_task(due_date: str = "", status: str = "incomplete") -> dict:
+def _make_task(due_date: str = "", status: str = "incomplete", status_char: str = " ") -> dict:
     """Minimal task dict for use in server function tests."""
     return {
         "id": "Projects/work.md:1",
         "description": "Test task",
         "status": status,
+        "status_char": status_char,
         "tags": [],
         "wikilinks": [],
         "due_date": due_date,
@@ -349,3 +350,57 @@ def test_get_task_summary_due_range_filter():
         )
     assert result["total_count"] == 1
 
+
+# ---------------------------------------------------------------------------
+# list_tasks — status_chars filter propagation
+# ---------------------------------------------------------------------------
+
+
+def test_list_tasks_status_chars_filters_to_doing():
+    """list_tasks(status_chars=['d']) must return only [d] tasks."""
+    import obsidian_tasks_mcp.server as srv
+
+    doing = _make_task(status_char="d")
+    doing["id"] = "Projects/work.md:1"
+    plain = _make_task(status_char=" ")
+    plain["id"] = "Projects/work.md:2"
+    plain["line_number"] = 2
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[doing, plain]):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="", status_chars=["d"])
+    assert result["total_count"] == 1
+    assert result["tasks"][0]["status_char"] == "d"
+
+
+def test_list_tasks_status_chars_empty_returns_all():
+    """list_tasks(status_chars=[]) must return all tasks regardless of char."""
+    import obsidian_tasks_mcp.server as srv
+
+    doing = _make_task(status_char="d")
+    plain = _make_task(status_char=" ")
+    plain["id"] = "Projects/work.md:2"
+    plain["line_number"] = 2
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[doing, plain]):
+        from obsidian_tasks_mcp.server import list_tasks
+
+        result = list_tasks(status="all", path_excludes="", status_chars=[])
+    assert result["total_count"] == 2
+
+
+def test_get_task_summary_status_chars_filter():
+    """get_task_summary(status_chars=['d']) must count only [d] tasks."""
+    import obsidian_tasks_mcp.server as srv
+
+    doing = _make_task(status_char="d")
+    plain = _make_task(status_char=" ")
+    plain["id"] = "Projects/work.md:2"
+    plain["line_number"] = 2
+
+    with patch.object(srv.vault, "get_all_tasks", return_value=[doing, plain]):
+        from obsidian_tasks_mcp.server import get_task_summary
+
+        result = get_task_summary(status="all", group_by="file", path_excludes="", status_chars=["d"])
+    assert result["total_count"] == 1

@@ -120,6 +120,58 @@ def test_update_mark_undone_resets_to_plain_pending(vault: VaultManager):
 
 
 # ---------------------------------------------------------------------------
+# update_task — mark_doing
+# ---------------------------------------------------------------------------
+
+
+def test_update_mark_doing_sets_d_status_char(vault: VaultManager):
+    """mark_doing on a plain pending task must write [d]."""
+    tasks = vault.get_all_tasks()
+    pending = next(t for t in tasks if t["status"] == "incomplete" and t.get("status_char") == " ")
+    updated = vault.update_task(pending["file_path"], pending["line_number"], "mark_doing")
+    assert updated["status"] == "incomplete"
+    assert updated["status_char"] == "d"
+
+
+def test_update_mark_doing_persisted(vault: VaultManager):
+    """mark_doing must persist [d] to disk."""
+    tasks = vault.get_all_tasks()
+    pending = next(t for t in tasks if t["status"] == "incomplete" and t.get("status_char") == " ")
+    vault.update_task(pending["file_path"], pending["line_number"], "mark_doing")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == pending["file_path"] and t["line_number"] == pending["line_number"]
+    )
+    assert found["status_char"] == "d"
+    assert found["status"] == "incomplete"
+
+
+def test_update_mark_doing_clears_done_date(vault: VaultManager):
+    """mark_doing on a complete task must clear done_date and set [d]."""
+    tasks = vault.get_all_tasks()
+    complete = next(t for t in tasks if t["status"] == "complete")
+    updated = vault.update_task(complete["file_path"], complete["line_number"], "mark_doing")
+    assert updated["status"] == "incomplete"
+    assert updated["status_char"] == "d"
+    assert updated["done_date"] == ""
+
+
+def test_bulk_update_mark_doing(vault: VaultManager):
+    """bulk_update_tasks with mark_doing must set [d] on all matched tasks."""
+    tasks = vault.get_all_tasks()
+    pending = [t for t in tasks if t["status"] == "incomplete" and t.get("status_char") == " "]
+    ids = [t["id"] for t in pending[:2]]
+    result = vault.bulk_update_tasks(ids, "mark_doing")
+    assert result["updated_count"] == len(ids)
+    refreshed = vault.get_all_tasks()
+    for tid in ids:
+        fp, ln = tid.rsplit(":", 1)
+        found = next(t for t in refreshed if t["file_path"] == fp and t["line_number"] == int(ln))
+        assert found["status_char"] == "d"
+
+
+# ---------------------------------------------------------------------------
 # update_task — custom status_char preservation
 # ---------------------------------------------------------------------------
 

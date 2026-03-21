@@ -82,6 +82,7 @@ list_tasks(
     limit=200,
     due_from="",             # YYYY-MM-DD — keep tasks with due date on or after this date
     due_to="",               # YYYY-MM-DD — keep tasks with due date on or before this date
+    status_chars=[],         # filter by raw checkbox char — see table below
 )
 ```
 
@@ -109,6 +110,22 @@ list_tasks(due_from="2026-03-15", due_to="2026-03-18")
 
 Tasks without a due date are **excluded** when `due_from` or `due_to` is specified.
 
+`status_chars` lets you filter by the raw Obsidian checkbox character (see [Custom checkbox statuses](#custom-checkbox-statuses-obsidian-style)):
+
+```python
+# "Get me all working / in-progress tasks"
+list_tasks(status_chars=["d"])
+
+# "Show me all blocked tasks"
+list_tasks(status_chars=["!"])
+
+# "Show only plain pending tasks (not in-progress, not blocked)"
+list_tasks(status_chars=[" "])
+
+# Multiple chars at once
+list_tasks(status_chars=["d", "!"])
+```
+
 ### `update_task`
 
 ```python
@@ -120,17 +137,18 @@ update_task(
 )
 ```
 
-**Operations:** `mark_done`, `mark_undone`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`
+**Operations:** `mark_done`, `mark_undone`, `mark_doing`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`
 
-| Operation | `value` |
-|-----------|---------|
-| `mark_done` | _(ignored)_ |
-| `mark_undone` | _(ignored)_ |
-| `add_due_date` / `reschedule` | `YYYY-MM-DD` |
-| `add_tag` / `remove_tag` | tag name (with or without `#`) |
-| `update_description` | replacement text |
-| `add_reminder` | `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` |
-| `remove_reminder` | _(ignored)_ |
+| Operation | What it does | Natural language trigger |
+|-----------|-------------|--------------------------|
+| `mark_done` | `[x]` + sets done date | "mark this done", "complete it" |
+| `mark_undone` | `[ ]` + clears done date | "reopen", "make pending again" |
+| `mark_doing` | `[d]` — in progress | "I've started", "mark as working", "set to in-progress" |
+| `add_due_date` / `reschedule` | sets due date | — |
+| `add_tag` / `remove_tag` | — | — |
+| `update_description` | — | — |
+| `add_reminder` | `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` | — |
+| `remove_reminder` | — | — |
 
 ### `create_task`
 
@@ -230,15 +248,16 @@ bulk_update_tasks(
     filter_file="Projects/work.md",   # …use filters to select automatically
     filter_status="incomplete",
     filter_tag="tech-debt",
+    filter_status_chars=[],           # e.g. ["d"] to only pick up in-progress tasks
     operation="mark_done",            # same operations as update_task
     value="",
     dry_run=False
 )
 ```
 
-Applies the same operation to many tasks at once. Provide either explicit `task_ids` (formatted as `"file_path:line"`) or a combination of `filter_file`, `filter_status`, and `filter_tag`. Updates are applied bottom-up within each file to keep line numbers stable.
+Applies the same operation to many tasks at once. Provide either explicit `task_ids` (formatted as `"file_path:line"`) or a combination of `filter_file`, `filter_status`, `filter_tag`, and `filter_status_chars`. Updates are applied bottom-up within each file to keep line numbers stable.
 
-**Operations:** `mark_done`, `mark_undone`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`
+**Operations:** `mark_done`, `mark_undone`, `mark_doing`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`
 
 ### `search_tasks`
 
@@ -285,12 +304,24 @@ Any checkbox character other than `x`/`X` is treated as **incomplete**. This mea
 
 When filtering with `status="incomplete"`, all of the above non-`x` variants are returned. Every parsed task exposes the raw bracket character as a separate **`status_char`** field (e.g. `"d"`, `"!"`, `" "`, `"x"`).
 
-Custom characters are **fully round-tripped**: any operation that doesn't change the status (add tag, reschedule, update description, add reminder, etc.) leaves the original bracket character intact. Only two operations affect the bracket:
+Custom characters are **fully round-tripped**: any operation that doesn't change the status (add tag, reschedule, update description, add reminder, etc.) leaves the original bracket character intact. Three operations affect the bracket:
 
 | Operation | Result |
 |-----------|--------|
 | `mark_done` | bracket becomes `x` (`- [x]`) |
 | `mark_undone` | bracket resets to a plain space (`- [ ]`) |
+| `mark_doing` | bracket becomes `d` (`- [d]`) |
+
+### Natural-language examples
+
+| You say… | Tool call |
+|----------|-----------|
+| "Get me all working / in-progress tasks" | `list_tasks(status_chars=["d"])` |
+| "Show me all blocked tasks" | `list_tasks(status_chars=["!"])` |
+| "I've started working on this task" | `update_task(…, operation="mark_doing")` |
+| "Mark these tasks as in-progress" | `bulk_update_tasks(task_ids=[…], operation="mark_doing")` |
+| "Make these tasks pending again" | `bulk_update_tasks(task_ids=[…], operation="mark_undone")` |
+| "Mark this done" | `update_task(…, operation="mark_done")` |
 
 ### Reminder plugin (`⏰`) support
 

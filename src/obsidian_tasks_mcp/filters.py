@@ -12,6 +12,7 @@ def apply_filters(
     path_excludes: str = "Journal",
     due_from: str = "",
     due_to: str = "",
+    status_chars: list[str] | None = None,
 ) -> list[dict]:
     """Apply multiple filters to a flat list of task dicts.
 
@@ -30,18 +31,28 @@ def apply_filters(
                         ``due_date`` is on or after this date.
         due_to:         If non-empty (``YYYY-MM-DD``), keep only tasks whose
                         ``due_date`` is on or before this date.
+        status_chars:   If non-empty, keep only tasks whose raw checkbox character
+                        (``status_char``) is one of the listed characters.
+                        For example ``["d"]`` returns only ``- [d]`` tasks.
+                        Empty list / None means no filter.
 
     Returns:
         Filtered list of task dicts (same objects, not copies).
     """
     if tags is None:
         tags = []
+    if status_chars is None:
+        status_chars = []
 
     result = tasks
 
     # --- status ---
     if status != "all":
         result = [t for t in result if t["status"] == status]
+
+    # --- status_chars ---
+    if status_chars:
+        result = [t for t in result if t.get("status_char", " ") in status_chars]
 
     # --- tags ---
     if tags:

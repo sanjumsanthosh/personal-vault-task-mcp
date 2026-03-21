@@ -90,6 +90,7 @@ def list_tasks(
     limit: int = 200,
     due_from: str = "",
     due_to: str = "",
+    status_chars: list[str] = [],
 ) -> dict:
     """List tasks from your Obsidian vault with filters.
 
@@ -112,13 +113,29 @@ def list_tasks(
                        (YYYY-MM-DD).  Tasks without a due date are excluded.
         due_to:        Keep only tasks with a due date on or before this date
                        (YYYY-MM-DD).  Tasks without a due date are excluded.
+        status_chars:  Filter by the raw Obsidian checkbox character.  When set,
+                       only tasks whose bracket character is in this list are
+                       returned.  Leave empty for no filter.
+                       Common values:
+                         " "  — plain pending (- [ ])
+                         "d"  — in progress / doing (- [d])
+                         "!"  — blocked / urgent (- [!])
+                         "-"  — cancelled / deferred (- [-])
+                       Examples:
+                         "get me all in-progress / working tasks"
+                             → status_chars=["d"]
+                         "show me all blocked tasks"
+                             → status_chars=["!"]
+                         "show only plain pending tasks (not doing, not blocked)"
+                             → status_chars=[" "]
     """
     today = date.today()
     cal = today.isocalendar()
 
     tasks = vault.get_all_tasks()
     filtered = apply_filters(
-        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to
+        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to,
+        status_chars=status_chars,
     )
     total_count = len(filtered)
     limited = filtered[:limit]
@@ -153,14 +170,22 @@ def list_tasks(
 def update_task(
     file_path: str, line_number: int, operation: str, value: str = ""
 ) -> dict:
-    """Update a task in the vault — mark done, reschedule, add reminder, etc.
+    """Update a task in the vault — mark done, mark in-progress, reschedule, add reminder, etc.
 
     Args:
         file_path:   Vault-relative path, e.g. "Projects/work.md".
         line_number: 1-based line number as returned by list_tasks.
-        operation:   One of: mark_done, mark_undone, add_due_date, reschedule,
+        operation:   One of: mark_done, mark_undone, mark_doing,
+                     add_due_date, reschedule,
                      add_tag, remove_tag, update_description,
                      add_reminder, remove_reminder.
+                     Natural-language guidance:
+                       "mark this done / complete it"
+                           → operation="mark_done"
+                       "I've started working on this / set to in-progress / doing"
+                           → operation="mark_doing"
+                       "make this pending / not done yet / reopen it"
+                           → operation="mark_undone"
         value:       Depends on the operation: a date string for
                      add_due_date/reschedule, a tag name for add_tag/remove_tag,
                      free text for update_description, or a reminder datetime
@@ -231,6 +256,7 @@ def get_task_summary(
     path_excludes: str = "Journal",
     due_from: str = "",
     due_to: str = "",
+    status_chars: list[str] = [],
 ) -> dict:
     """Return a structured summary of tasks, pre-grouped and counted server-side.
 
@@ -251,13 +277,17 @@ def get_task_summary(
                        (YYYY-MM-DD).  Tasks without a due date are excluded.
         due_to:        Keep only tasks with a due date on or before this date
                        (YYYY-MM-DD).  Tasks without a due date are excluded.
+        status_chars:  Filter by raw Obsidian checkbox character (same semantics
+                       as list_tasks).  E.g. ["d"] to summarise only in-progress
+                       tasks.
     """
     today = date.today()
     cal = today.isocalendar()
 
     tasks = vault.get_all_tasks()
     filtered = apply_filters(
-        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to
+        tasks, status, tags, due, path_includes, path_excludes, due_from, due_to,
+        status_chars=status_chars,
     )
     groups = _group_tasks(filtered, group_by)
 
@@ -370,6 +400,7 @@ def bulk_update_tasks(
     filter_file: str = "",
     filter_status: str = "incomplete",
     filter_tag: str = "",
+    filter_status_chars: list[str] = [],
     operation: str = "mark_done",
     value: str = "",
     dry_run: bool = False,
@@ -380,18 +411,29 @@ def bulk_update_tasks(
     or use the *filter_* parameters to select tasks automatically.
 
     Args:
-        task_ids:       Explicit list of task IDs in "file_path:line" format.
-        filter_file:    Vault-relative file path substring to restrict scope
-                        (required when task_ids is not provided).
-        filter_status:  Status filter for auto-selection: "incomplete", "complete",
-                        or "all".
-        filter_tag:     Tag filter for auto-selection (optional).
-        operation:      One of: mark_done, mark_undone, add_due_date, reschedule,
-                        add_tag, remove_tag, update_description,
-                        add_reminder, remove_reminder.
-        value:          Argument for the operation (e.g. a date, tag name, or
-                        reminder datetime YYYY-MM-DD HH:mm).
-        dry_run:        When True, return a preview without writing changes.
+        task_ids:            Explicit list of task IDs in "file_path:line" format.
+        filter_file:         Vault-relative file path substring to restrict scope
+                             (required when task_ids is not provided).
+        filter_status:       Status filter for auto-selection: "incomplete", "complete",
+                             or "all".
+        filter_tag:          Tag filter for auto-selection (optional).
+        filter_status_chars: Optional list of raw checkbox characters to restrict
+                             which tasks are selected (same semantics as the
+                             status_chars parameter in list_tasks).
+                             E.g. ["d"] to apply the operation only to in-progress
+                             tasks.
+        operation:           One of: mark_done, mark_undone, mark_doing,
+                             add_due_date, reschedule,
+                             add_tag, remove_tag, update_description,
+                             add_reminder, remove_reminder.
+                             Natural-language guidance:
+                               "mark these tasks as in-progress / I've started working"
+                                   → operation="mark_doing"
+                               "make these tasks pending again"
+                                   → operation="mark_undone"
+        value:               Argument for the operation (e.g. a date, tag name, or
+                             reminder datetime YYYY-MM-DD HH:mm).
+        dry_run:             When True, return a preview without writing changes.
     """
     resolved_ids = list(task_ids) if task_ids else []
 
@@ -400,7 +442,10 @@ def bulk_update_tasks(
             return {"error": "Provide either task_ids or filter_file for safety"}
         all_tasks = vault.get_all_tasks()
         tag_list = [filter_tag] if filter_tag else []
-        filtered = apply_filters(all_tasks, filter_status, tag_list, "all", filter_file, "")
+        filtered = apply_filters(
+            all_tasks, filter_status, tag_list, "all", filter_file, "",
+            status_chars=filter_status_chars,
+        )
         resolved_ids = [t["id"] for t in filtered]
 
     if not resolved_ids:
