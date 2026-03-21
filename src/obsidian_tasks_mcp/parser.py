@@ -4,6 +4,11 @@ Handles the emoji-based syntax used by the Obsidian Tasks plugin:
   - [ ] Description 🔺 📅 2026-03-15 #tag
   - [x] Done task ✅ 2026-03-14
 
+Custom / Obsidian-style checkbox characters are fully supported.  Any
+character other than ``x`` / ``X`` is treated as *incomplete*, so statuses
+such as ``[d]`` (doing), ``[!]`` (blocked), or ``[-]`` (cancelled) all appear
+in incomplete/pending task lists.
+
 Also handles the Reminder plugin ⏰ syntax:
   - [ ] Task ⏰ 2026-03-15        (reminder on that date at default time)
   - [ ] Task ⏰ 2026-03-15 10:00  (reminder at specific time)
@@ -13,8 +18,8 @@ Also handles the Reminder plugin ⏰ syntax:
 import re
 from typing import Optional
 
-# Match a task line: optional indent, dash, checkbox, content
-TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.+)$")
+# Match a task line: optional indent, dash, checkbox (any single char), content
+TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[(.)\]\s+(.+)$")
 
 # Obsidian Tasks plugin emoji patterns
 DUE_DATE_PATTERN = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")

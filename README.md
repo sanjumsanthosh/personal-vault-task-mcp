@@ -269,6 +269,22 @@ This server reads and writes tasks in the [Obsidian Tasks plugin](https://obsidi
 - [x] Deploy service ✅ 2026-03-14
 ```
 
+### Custom checkbox statuses (Obsidian-style)
+
+Any checkbox character other than `x`/`X` is treated as **incomplete**. This means Obsidian-style custom statuses work out of the box:
+
+| Markdown | Status | Example meaning |
+|----------|--------|-----------------|
+| `- [ ] Task` | `incomplete` | Pending / not started |
+| `- [d] Task` | `incomplete` | Doing / in progress |
+| `- [!] Task` | `incomplete` | Blocked / urgent |
+| `- [-] Task` | `incomplete` | Cancelled / deferred |
+| `- [?] Task` | `incomplete` | Needs clarification |
+| `- [x] Task` | `complete` | Done |
+| `- [X] Task` | `complete` | Done (uppercase) |
+
+When filtering with `status="incomplete"`, all of the above non-`x` variants are returned. The raw checkbox character is not currently exposed as a separate field; the `status` field will be either `"incomplete"` or `"complete"`.
+
 ### Reminder plugin (`⏰`) support
 
 The server also handles the [Obsidian Reminder plugin](https://github.com/uphy/obsidian-reminder) `⏰` field. The reminder datetime is placed **between the priority and the due date** — the Reminder plugin requires that nothing appear between `⏰` and `📅`:

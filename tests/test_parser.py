@@ -81,6 +81,62 @@ def test_parse_task_default_file_and_line():
 
 
 # ---------------------------------------------------------------------------
+# parse_task_line — custom / Obsidian-style checkbox statuses
+# ---------------------------------------------------------------------------
+
+
+def test_is_task_line_custom_status_doing():
+    assert is_task_line("- [d] Working on this") is True
+
+
+def test_is_task_line_custom_status_blocked():
+    assert is_task_line("- [!] Blocked task") is True
+
+
+def test_is_task_line_custom_status_dash():
+    assert is_task_line("- [-] Cancelled task") is True
+
+
+def test_is_task_line_custom_status_question():
+    assert is_task_line("- [?] Needs clarification") is True
+
+
+def test_parse_custom_status_doing_is_incomplete():
+    task = parse_task_line("- [d] Working on this", "Projects/work.md", 3)
+    assert task is not None
+    assert task["status"] == "incomplete"
+    assert task["description"] == "Working on this"
+
+
+def test_parse_custom_status_blocked_is_incomplete():
+    task = parse_task_line("- [!] Blocked task", "Projects/work.md", 4)
+    assert task is not None
+    assert task["status"] == "incomplete"
+    assert task["description"] == "Blocked task"
+
+
+def test_parse_custom_status_dash_is_incomplete():
+    task = parse_task_line("- [-] Cancelled task", "Projects/work.md", 5)
+    assert task is not None
+    assert task["status"] == "incomplete"
+
+
+def test_parse_custom_status_uppercase_not_x_is_incomplete():
+    task = parse_task_line("- [D] In progress uppercase", "file.md", 1)
+    assert task is not None
+    assert task["status"] == "incomplete"
+
+
+def test_parse_custom_status_preserves_description_and_metadata():
+    task = parse_task_line("- [d] Working on auth 📅 2026-03-20 #backend", "Projects/work.md", 8)
+    assert task is not None
+    assert task["status"] == "incomplete"
+    assert task["description"] == "Working on auth"
+    assert task["due_date"] == "2026-03-20"
+    assert "backend" in task["tags"]
+
+
+# ---------------------------------------------------------------------------
 # parse_task_line — due date
 # ---------------------------------------------------------------------------
 
