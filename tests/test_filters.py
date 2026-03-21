@@ -24,6 +24,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:5",
         "description": "Review end-to-end flow",
         "status": "incomplete",
+        "status_char": " ",
         "tags": ["micro-mng-todo"],
         "due_date": TODAY_ISO,
         "priority": "highest",
@@ -34,6 +35,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:6",
         "description": "Update API documentation",
         "status": "incomplete",
+        "status_char": " ",
         "tags": [],
         "due_date": IN_10_DAYS,
         "priority": "none",
@@ -44,6 +46,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:7",
         "description": "Set up CI/CD pipeline",
         "status": "complete",
+        "status_char": "x",
         "tags": [],
         "due_date": "",
         "priority": "none",
@@ -54,6 +57,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Journal/2026-03-14.md:5",
         "description": "Review morning emails",
         "status": "incomplete",
+        "status_char": " ",
         "tags": ["micro-mng-todo"],
         "due_date": TODAY_ISO,
         "priority": "none",
@@ -64,6 +68,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:8",
         "description": "Interesting article on distributed systems",
         "status": "incomplete",
+        "status_char": " ",
         "tags": ["interesting-read"],
         "due_date": "",
         "priority": "none",
@@ -74,6 +79,7 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:9",
         "description": "Overdue task",
         "status": "incomplete",
+        "status_char": " ",
         "tags": [],
         "due_date": YESTERDAY,
         "priority": "none",
@@ -84,11 +90,34 @@ SAMPLE_TASKS: list[dict] = [
         "id": "Projects/work.md:10",
         "description": "Task due in 5 days",
         "status": "incomplete",
+        "status_char": " ",
         "tags": [],
         "due_date": IN_5_DAYS,
         "priority": "none",
         "file_path": "Projects/work.md",
         "line_number": 10,
+    },
+    {
+        "id": "Projects/work.md:11",
+        "description": "Working on auth refactor",
+        "status": "incomplete",
+        "status_char": "d",
+        "tags": ["tech-debt"],
+        "due_date": "",
+        "priority": "none",
+        "file_path": "Projects/work.md",
+        "line_number": 11,
+    },
+    {
+        "id": "Projects/work.md:12",
+        "description": "Blocked by external team",
+        "status": "incomplete",
+        "status_char": "!",
+        "tags": [],
+        "due_date": "",
+        "priority": "none",
+        "file_path": "Projects/work.md",
+        "line_number": 12,
     },
 ]
 
@@ -169,7 +198,11 @@ def test_filter_due_this_week():
 def test_filter_due_no_date():
     result = apply_filters(SAMPLE_TASKS, status="all", due="no_date", path_excludes="")
     assert all(t["due_date"] == "" for t in result)
-    assert len(result) == 2  # CI/CD pipeline + interesting article
+    no_date_descriptions = {t["description"] for t in result}
+    assert "Set up CI/CD pipeline" in no_date_descriptions
+    assert "Interesting article on distributed systems" in no_date_descriptions
+    assert "Working on auth refactor" in no_date_descriptions
+    assert "Blocked by external team" in no_date_descriptions
 
 
 def test_filter_due_has_date():
@@ -285,3 +318,59 @@ def test_filter_due_range_combined_with_status():
     )
     assert all(t["status"] == "incomplete" for t in result)
     assert all(TODAY_ISO <= t["due_date"] <= IN_5_DAYS for t in result)
+
+
+# ---------------------------------------------------------------------------
+# status_chars filter
+# ---------------------------------------------------------------------------
+
+
+def test_filter_status_chars_doing():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=["d"])
+    assert len(result) == 1
+    assert result[0]["description"] == "Working on auth refactor"
+    assert all(t["status_char"] == "d" for t in result)
+
+
+def test_filter_status_chars_blocked():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=["!"])
+    assert len(result) == 1
+    assert result[0]["description"] == "Blocked by external team"
+
+
+def test_filter_status_chars_multiple_values():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=["d", "!"])
+    assert len(result) == 2
+    chars = {t["status_char"] for t in result}
+    assert chars == {"d", "!"}
+
+
+def test_filter_status_chars_space_only_pending():
+    result = apply_filters(SAMPLE_TASKS, status="incomplete", path_excludes="", status_chars=[" "])
+    # Only plain pending tasks (no custom char)
+    assert all(t["status_char"] == " " for t in result)
+    assert not any(t["status_char"] == "d" for t in result)
+    assert not any(t["status_char"] == "!" for t in result)
+
+
+def test_filter_status_chars_empty_no_filter():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=[])
+    assert len(result) == len(SAMPLE_TASKS)
+
+
+def test_filter_status_chars_none_no_filter():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=None)
+    assert len(result) == len(SAMPLE_TASKS)
+
+
+def test_filter_status_chars_combined_with_status():
+    # status="incomplete" + status_chars=["d"] → only [d] tasks that are incomplete
+    result = apply_filters(SAMPLE_TASKS, status="incomplete", path_excludes="", status_chars=["d"])
+    assert len(result) == 1
+    assert result[0]["status"] == "incomplete"
+    assert result[0]["status_char"] == "d"
+
+
+def test_filter_status_chars_no_match_returns_empty():
+    result = apply_filters(SAMPLE_TASKS, status="all", path_excludes="", status_chars=["?"])
+    assert result == []

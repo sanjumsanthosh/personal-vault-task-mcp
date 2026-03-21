@@ -95,7 +95,8 @@ class VaultManager:
 
         Supported operations:
             mark_done           — set status=complete, set done_date=today
-            mark_undone         — set status=incomplete, clear done_date
+            mark_undone         — set status=incomplete (plain [ ]), clear done_date
+            mark_doing          — set status=incomplete with [d] checkbox (in progress)
             add_due_date        — set due_date=value (YYYY-MM-DD)
             reschedule          — replace due_date with value
             add_tag             — append tag (value, with or without leading #)
@@ -125,6 +126,11 @@ class VaultManager:
             task["done_date"] = today
         elif operation == "mark_undone":
             task["status"] = "incomplete"
+            task["status_char"] = " "
+            task["done_date"] = ""
+        elif operation == "mark_doing":
+            task["status"] = "incomplete"
+            task["status_char"] = "d"
             task["done_date"] = ""
         elif operation in ("add_due_date", "reschedule"):
             task["due_date"] = value
@@ -307,6 +313,11 @@ class VaultManager:
             task["done_date"] = today
         elif operation == "mark_undone":
             task["status"] = "incomplete"
+            task["status_char"] = " "
+            task["done_date"] = ""
+        elif operation == "mark_doing":
+            task["status"] = "incomplete"
+            task["status_char"] = "d"
             task["done_date"] = ""
         elif operation in ("add_due_date", "reschedule"):
             task["due_date"] = value

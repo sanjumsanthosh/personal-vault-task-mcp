@@ -4,6 +4,11 @@ Handles the emoji-based syntax used by the Obsidian Tasks plugin:
   - [ ] Description 🔺 📅 2026-03-15 #tag
   - [x] Done task ✅ 2026-03-14
 
+Custom / Obsidian-style checkbox characters are fully supported.  Any
+character other than ``x`` / ``X`` is treated as *incomplete*, so statuses
+such as ``[d]`` (doing), ``[!]`` (blocked), or ``[-]`` (cancelled) all appear
+in incomplete/pending task lists.
+
 Also handles the Reminder plugin ⏰ syntax:
   - [ ] Task ⏰ 2026-03-15        (reminder on that date at default time)
   - [ ] Task ⏰ 2026-03-15 10:00  (reminder at specific time)
@@ -13,8 +18,8 @@ Also handles the Reminder plugin ⏰ syntax:
 import re
 from typing import Optional
 
-# Match a task line: optional indent, dash, checkbox, content
-TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[([ xX])\]\s+(.+)$")
+# Match a task line: optional indent, dash, checkbox (any single char), content
+TASK_LINE_PATTERN = re.compile(r"^(\s*)-\s+\[(.)\]\s+(.+)$")
 
 # Obsidian Tasks plugin emoji patterns
 DUE_DATE_PATTERN = re.compile(r"📅\s*(\d{4}-\d{2}-\d{2})")
@@ -66,8 +71,13 @@ def parse_task_line(
     Returns None if the line is not a task line.
 
     The returned dict has keys:
-        id, description, status, tags, due_date, done_date,
+        id, description, status, status_char, tags, due_date, done_date,
         reminder_time, priority, file_path, line_number
+
+    ``status_char`` is the raw single character found inside the checkbox
+    brackets (e.g. ``" "``, ``"x"``, ``"d"``, ``"!"``, ``"-"``).  It is
+    preserved so that ``format_task_line`` can round-trip custom Obsidian
+    checkbox styles without losing the original character.
     """
     match = TASK_LINE_PATTERN.match(line)
     if not match:
@@ -118,6 +128,7 @@ def parse_task_line(
         "id": f"{file_path}:{line_number}",
         "description": description,
         "status": status,
+        "status_char": status_char,
         "tags": tags,
         "wikilinks": wikilinks,
         "due_date": due_date,
@@ -137,7 +148,15 @@ def format_task_line(task: dict) -> str:
     The ⏰ reminder is placed immediately before 📅 due date (if both are present)
     to comply with the Reminder plugin's parsing requirements.
     """
-    status_char = "x" if task.get("status") == "complete" else " "
+    if task.get("status") == "complete":
+        status_char = "x"
+    else:
+        # Preserve the original custom checkbox character (e.g. "d", "!", "-").
+        # Fall back to a plain space for brand-new tasks that have no stored char.
+        status_char = task.get("status_char", " ")
+        if status_char.lower() == "x":
+            # Guard: "x"/"X" must not appear in an incomplete task's bracket.
+            status_char = " "
 
     parts: list[str] = [f"- [{status_char}]", task.get("description", "").strip()]
 
