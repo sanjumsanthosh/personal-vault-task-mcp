@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-from obsidian_tasks_mcp.parser import format_task_line, is_task_line, parse_task_line
+from obsidian_tasks_mcp.parser import format_task_line, is_task_line, parse_inline_metadata, parse_task_line
 
 
 class VaultManager:
@@ -142,7 +142,17 @@ class VaultManager:
             tag = value.lstrip("#")
             task["tags"] = [t for t in task["tags"] if t != tag]
         elif operation == "update_description":
-            task["description"] = value
+            # Extract any inline tags / due date embedded in the new description
+            # value (e.g. "new task text #tag 📅 2026-03-21").  This prevents
+            # duplicate metadata in the formatted output and ensures that a tag
+            # appearing immediately before the due-date token is correctly handled.
+            clean_desc, inline_tags, inline_due = parse_inline_metadata(value)
+            task["description"] = clean_desc
+            for t in inline_tags:
+                if t not in task["tags"]:
+                    task["tags"].append(t)
+            if inline_due:
+                task["due_date"] = inline_due
         elif operation == "add_reminder":
             task["reminder_time"] = value
         elif operation == "remove_reminder":
@@ -177,13 +187,37 @@ class VaultManager:
             inbox       — Inbox.md at vault root   (created if missing)
             file        — the path given in *file_path*
 
+        The *description* may contain inline Obsidian-style metadata such as
+        ``#tag`` or ``📅 YYYY-MM-DD`` — including tags that appear immediately
+        before the due-date token (e.g. ``"my task #work 📅 2026-03-21"``).
+        Any such metadata is extracted and merged with the explicit *tag* and
+        *due_date* parameters (explicit parameters take precedence over
+        embedded values).
+
         Returns the created task dict (including id, file_path, line_number).
         """
+        # Extract any inline tags / due date embedded in the description string.
+        # This handles the case where the caller passes a raw task description
+        # that includes markers like "#tag 📅 YYYY-MM-DD" (tag before due date
+        # or any other position) rather than supplying them as separate params.
+        clean_description, inline_tags, inline_due = parse_inline_metadata(description)
+
+        # Merge tags: inline tags first, then the explicit tag (deduplication
+        # preserves order and avoids listing the same tag twice).
+        explicit_tag = tag.lstrip("#") if tag else ""
+        merged_tags = list(dict.fromkeys(
+            t for t in (inline_tags + ([explicit_tag] if explicit_tag else []))
+            if t
+        ))
+
+        # Explicit due_date takes precedence over an embedded one.
+        resolved_due_date = due_date if due_date else inline_due
+
         task: dict = {
-            "description": description,
+            "description": clean_description,
             "status": "incomplete",
-            "tags": [tag.lstrip("#")] if tag else [],
-            "due_date": due_date,
+            "tags": merged_tags,
+            "due_date": resolved_due_date,
             "done_date": "",
             "reminder_time": reminder_time,
             "priority": priority,
@@ -329,7 +363,17 @@ class VaultManager:
             tag = value.lstrip("#")
             task["tags"] = [t for t in task["tags"] if t != tag]
         elif operation == "update_description":
-            task["description"] = value
+            # Extract any inline tags / due date embedded in the new description
+            # value (e.g. "new task text #tag 📅 2026-03-21").  This prevents
+            # duplicate metadata in the formatted output and ensures that a tag
+            # appearing immediately before the due-date token is correctly handled.
+            clean_desc, inline_tags, inline_due = parse_inline_metadata(value)
+            task["description"] = clean_desc
+            for t in inline_tags:
+                if t not in task["tags"]:
+                    task["tags"].append(t)
+            if inline_due:
+                task["due_date"] = inline_due
         elif operation == "add_reminder":
             task["reminder_time"] = value
         elif operation == "remove_reminder":

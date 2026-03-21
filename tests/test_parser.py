@@ -5,6 +5,7 @@ import pytest
 from obsidian_tasks_mcp.parser import (
     format_task_line,
     is_task_line,
+    parse_inline_metadata,
     parse_task_line,
 )
 
@@ -564,4 +565,141 @@ def test_roundtrip_reminder_date_only():
     assert task2 is not None
     assert task2["reminder_time"] == "2026-03-15"
     assert task2["description"] == "Daily standup"
+
+
+# ---------------------------------------------------------------------------
+# Tag immediately before due date — regression tests
+# ---------------------------------------------------------------------------
+
+
+def test_parse_tag_immediately_before_due_date():
+    """Tag directly before 📅 (with a separating space) must be detected."""
+    task = parse_task_line(
+        "- [ ] compare llms to see which one is good? #micro-mng-todo 📅 2026-03-21",
+        "f.md", 1,
+    )
+    assert task is not None
+    assert task["due_date"] == "2026-03-21"
+    assert "micro-mng-todo" in task["tags"]
+    assert task["description"] == "compare llms to see which one is good?"
+
+
+def test_parse_tag_immediately_before_due_date_no_space():
+    """Tag followed by 📅 with *no* space between them must still be detected."""
+    task = parse_task_line(
+        "- [ ] Task #micro-mng-todo📅 2026-03-21",
+        "f.md", 1,
+    )
+    assert task is not None
+    assert task["due_date"] == "2026-03-21"
+    assert "micro-mng-todo" in task["tags"]
+    assert task["description"] == "Task"
+
+
+def test_parse_multiple_tags_one_before_due_date():
+    """One tag before and one tag after the due date are both detected."""
+    task = parse_task_line(
+        "- [ ] compare llms? #micro-mng-todo 📅 2026-03-21 #work",
+        "f.md", 1,
+    )
+    assert task is not None
+    assert task["due_date"] == "2026-03-21"
+    assert "micro-mng-todo" in task["tags"]
+    assert "work" in task["tags"]
+    assert task["description"] == "compare llms?"
+
+
+def test_tag_before_due_date_not_in_description():
+    """Tags and the due-date marker must not appear in the cleaned description."""
+    task = parse_task_line(
+        "- [ ] compare llms? #micro-mng-todo 📅 2026-03-21",
+        "f.md", 1,
+    )
+    assert task is not None
+    assert "#micro-mng-todo" not in task["description"]
+    assert "📅" not in task["description"]
+    assert "2026-03-21" not in task["description"]
+
+
+def test_roundtrip_tag_before_due_date():
+    """parse → format → parse must preserve all fields when tag precedes due date."""
+    original = "- [ ] compare llms to see which one is good? #micro-mng-todo 📅 2026-03-21"
+    task = parse_task_line(original, "f.md", 1)
+    assert task is not None
+    reformatted = format_task_line(task)
+    task2 = parse_task_line(reformatted, "f.md", 1)
+    assert task2 is not None
+    assert task2["description"] == task["description"]
+    assert task2["due_date"] == task["due_date"]
+    assert task2["tags"] == task["tags"]
+
+
+def test_roundtrip_tag_before_due_date_with_priority():
+    """Round-trip with priority + tag-before-due-date combination."""
+    original = "- [ ] Review PR 🔺 #micro-mng-todo 📅 2026-03-21"
+    task = parse_task_line(original, "f.md", 1)
+    assert task is not None
+    assert task["priority"] == "highest"
+    assert "micro-mng-todo" in task["tags"]
+    assert task["due_date"] == "2026-03-21"
+    reformatted = format_task_line(task)
+    task2 = parse_task_line(reformatted, "f.md", 1)
+    assert task2 is not None
+    assert task2["priority"] == task["priority"]
+    assert task2["tags"] == task["tags"]
+    assert task2["due_date"] == task["due_date"]
+
+
+# ---------------------------------------------------------------------------
+# parse_inline_metadata
+# ---------------------------------------------------------------------------
+
+
+def test_parse_inline_metadata_tag_before_due():
+    clean, tags, due = parse_inline_metadata(
+        "compare llms? #micro-mng-todo 📅 2026-03-21"
+    )
+    assert clean == "compare llms?"
+    assert tags == ["micro-mng-todo"]
+    assert due == "2026-03-21"
+
+
+def test_parse_inline_metadata_tag_after_due():
+    clean, tags, due = parse_inline_metadata(
+        "compare llms? 📅 2026-03-21 #micro-mng-todo"
+    )
+    assert clean == "compare llms?"
+    assert tags == ["micro-mng-todo"]
+    assert due == "2026-03-21"
+
+
+def test_parse_inline_metadata_no_metadata():
+    clean, tags, due = parse_inline_metadata("plain description text")
+    assert clean == "plain description text"
+    assert tags == []
+    assert due == ""
+
+
+def test_parse_inline_metadata_only_tag():
+    clean, tags, due = parse_inline_metadata("do something #work")
+    assert clean == "do something"
+    assert tags == ["work"]
+    assert due == ""
+
+
+def test_parse_inline_metadata_only_due():
+    clean, tags, due = parse_inline_metadata("do something 📅 2026-03-21")
+    assert clean == "do something"
+    assert tags == []
+    assert due == "2026-03-21"
+
+
+def test_parse_inline_metadata_multiple_tags():
+    clean, tags, due = parse_inline_metadata(
+        "task #alpha #beta 📅 2026-03-21"
+    )
+    assert clean == "task"
+    assert "alpha" in tags
+    assert "beta" in tags
+    assert due == "2026-03-21"
 
