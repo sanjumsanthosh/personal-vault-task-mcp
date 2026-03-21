@@ -653,3 +653,104 @@ def test_clean_blank_lines_keeps_single():
     lines = ["a", "", "b"]
     result = VaultManager._clean_blank_lines(lines)
     assert result == ["a", "", "b"]
+
+
+# ---------------------------------------------------------------------------
+# create_task — inline metadata in description (tag before due date)
+# ---------------------------------------------------------------------------
+
+
+def test_create_task_description_with_embedded_tag_and_due(tmp_path: Path):
+    """create_task cleans embedded #tag and 📅 date from the description."""
+    v = VaultManager(tmp_path)
+    task = v.create_task(
+        description="compare llms? #micro-mng-todo 📅 2026-03-21",
+        target="inbox",
+    )
+    assert task["description"] == "compare llms?"
+    assert "micro-mng-todo" in task["tags"]
+    assert task["due_date"] == "2026-03-21"
+
+
+def test_create_task_explicit_due_overrides_embedded(tmp_path: Path):
+    """Explicit due_date parameter takes precedence over embedded date."""
+    v = VaultManager(tmp_path)
+    task = v.create_task(
+        description="compare llms? #micro-mng-todo 📅 2026-03-21",
+        due_date="2026-03-25",
+        target="inbox",
+    )
+    assert task["due_date"] == "2026-03-25"
+    assert "micro-mng-todo" in task["tags"]
+
+
+def test_create_task_explicit_tag_merged_with_embedded(tmp_path: Path):
+    """Explicit tag and embedded tag are both stored (deduplicated)."""
+    v = VaultManager(tmp_path)
+    task = v.create_task(
+        description="compare llms? #micro-mng-todo 📅 2026-03-21",
+        tag="work",
+        target="inbox",
+    )
+    assert "micro-mng-todo" in task["tags"]
+    assert "work" in task["tags"]
+
+
+def test_create_task_embedded_tag_written_correctly(tmp_path: Path):
+    """The stored file line must reflect the extracted metadata."""
+    v = VaultManager(tmp_path)
+    task = v.create_task(
+        description="compare llms? #micro-mng-todo 📅 2026-03-21",
+        target="inbox",
+    )
+    # Read the written line back and re-parse to confirm it round-trips cleanly.
+    lines = (tmp_path / "Inbox.md").read_text(encoding="utf-8").splitlines()
+    written_line = lines[task["line_number"] - 1]
+    from obsidian_tasks_mcp.parser import parse_task_line
+    reparsed = parse_task_line(written_line, "Inbox.md", task["line_number"])
+    assert reparsed is not None
+    assert reparsed["description"] == "compare llms?"
+    assert "micro-mng-todo" in reparsed["tags"]
+    assert reparsed["due_date"] == "2026-03-21"
+
+
+# ---------------------------------------------------------------------------
+# update_description — inline metadata in new value (tag before due date)
+# ---------------------------------------------------------------------------
+
+
+def test_update_description_with_embedded_tag_and_due(vault: VaultManager):
+    """update_description extracts #tag and 📅 date from the new description."""
+    tasks = vault.get_all_tasks()
+    target = next(t for t in tasks if t["status"] == "incomplete")
+    task = vault.update_task(
+        target["file_path"],
+        target["line_number"],
+        "update_description",
+        "new task text #newwork 📅 2026-05-01",
+    )
+    assert task["description"] == "new task text"
+    assert "newwork" in task["tags"]
+    assert task["due_date"] == "2026-05-01"
+
+
+def test_update_description_embedded_due_not_duplicated(vault: VaultManager):
+    """Embedding a due date in update_description must not produce duplicate 📅 tokens."""
+    tasks = vault.get_all_tasks()
+    # Pick a task that already has a due date so we can verify it gets replaced.
+    target = next((t for t in tasks if t["status"] == "incomplete" and t["due_date"]), None)
+    if target is None:
+        pytest.skip("No incomplete task with due date in sample vault")
+
+    task = vault.update_task(
+        target["file_path"],
+        target["line_number"],
+        "update_description",
+        "replaced description #qtag 📅 2026-09-01",
+    )
+    # Re-read the written line to confirm no duplicate 📅.
+    lines = (vault.vault_path / target["file_path"]).read_text(encoding="utf-8").splitlines()
+    written = lines[target["line_number"] - 1]
+    assert written.count("📅") == 1
+    assert task["due_date"] == "2026-09-01"
+    assert "qtag" in task["tags"]

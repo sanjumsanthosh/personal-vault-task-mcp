@@ -13,6 +13,11 @@ Also handles the Reminder plugin ⏰ syntax:
   - [ ] Task ⏰ 2026-03-15        (reminder on that date at default time)
   - [ ] Task ⏰ 2026-03-15 10:00  (reminder at specific time)
   - [ ] Task 🔺 ⏰ 2026-03-15 09:00 📅 2026-03-15 #tag
+
+Tags may appear anywhere in a task line — including immediately before the
+due-date token — and are reliably detected in all parsing and write paths:
+  - [ ] Task description #my-tag 📅 2026-03-21   (tag before due date)
+  - [ ] Task description 📅 2026-03-21 #my-tag   (tag after due date)
 """
 
 import re
@@ -61,6 +66,36 @@ PRIORITY_TO_EMOJI["none"] = ""
 def is_task_line(line: str) -> bool:
     """Return True if the line is an Obsidian task line."""
     return TASK_LINE_PATTERN.match(line) is not None
+
+
+def parse_inline_metadata(text: str) -> tuple[str, list[str], str]:
+    """Extract inline tags and due date embedded in a plain description string.
+
+    This is useful when a raw description may contain Obsidian-style metadata
+    such as ``#tag`` or ``📅 YYYY-MM-DD`` (e.g. when the caller pastes a task
+    description that includes these markers rather than providing them as
+    separate parameters).  Tags are supported in any position, including
+    immediately before the due-date token:
+
+        "compare llms? #micro-mng-todo 📅 2026-03-21"
+
+    Returns a three-tuple ``(clean_text, tags, due_date)`` where:
+
+    * ``clean_text``  — the description with all extracted markers removed and
+                        whitespace normalised.
+    * ``tags``        — list of tag strings (without the leading ``#``).
+    * ``due_date``    — YYYY-MM-DD string, or ``""`` if not found.
+    """
+    due_match = DUE_DATE_PATTERN.search(text)
+    due_date = due_match.group(1) if due_match else ""
+
+    tags = TAG_PATTERN.findall(text)
+
+    clean = DUE_DATE_PATTERN.sub("", text)
+    clean = TAG_PATTERN.sub("", clean)
+    clean = clean.strip()
+
+    return clean, tags, due_date
 
 
 def parse_task_line(
