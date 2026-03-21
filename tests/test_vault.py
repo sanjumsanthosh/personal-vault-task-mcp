@@ -36,7 +36,7 @@ def test_get_all_tasks_returns_list(vault: VaultManager):
 
 def test_get_all_tasks_have_required_keys(vault: VaultManager):
     tasks = vault.get_all_tasks()
-    required = {"id", "description", "status", "tags", "due_date", "priority", "file_path", "line_number"}
+    required = {"id", "description", "status", "status_char", "tags", "due_date", "priority", "file_path", "line_number"}
     for task in tasks:
         assert required.issubset(task.keys()), f"Missing keys in {task}"
 
@@ -103,6 +103,67 @@ def test_update_mark_undone(vault: VaultManager):
     updated = vault.update_task(complete["file_path"], complete["line_number"], "mark_undone")
     assert updated["status"] == "incomplete"
     assert updated["done_date"] == ""
+
+
+def test_update_mark_undone_resets_to_plain_pending(vault: VaultManager):
+    """mark_undone must write '- [ ]', not '- [x]' or any custom char."""
+    tasks = vault.get_all_tasks()
+    complete = next(t for t in tasks if t["status"] == "complete")
+    vault.update_task(complete["file_path"], complete["line_number"], "mark_undone")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == complete["file_path"] and t["line_number"] == complete["line_number"]
+    )
+    assert found["status"] == "incomplete"
+    assert found["status_char"] == " "
+
+
+# ---------------------------------------------------------------------------
+# update_task — custom status_char preservation
+# ---------------------------------------------------------------------------
+
+
+def test_custom_status_char_preserved_on_add_tag(vault: VaultManager):
+    """Adding a tag to a [d] task must keep the [d] bracket."""
+    tasks = vault.get_all_tasks()
+    doing = next(t for t in tasks if t.get("status_char") == "d")
+    vault.update_task(doing["file_path"], doing["line_number"], "add_tag", "in-progress")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == doing["file_path"] and t["line_number"] == doing["line_number"]
+    )
+    assert found["status_char"] == "d"
+    assert "in-progress" in found["tags"]
+
+
+def test_custom_status_char_preserved_on_add_due_date(vault: VaultManager):
+    """Setting a due date on a [d] task must keep the [d] bracket."""
+    tasks = vault.get_all_tasks()
+    doing = next(t for t in tasks if t.get("status_char") == "d")
+    vault.update_task(doing["file_path"], doing["line_number"], "add_due_date", "2026-06-01")
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == doing["file_path"] and t["line_number"] == doing["line_number"]
+    )
+    assert found["status_char"] == "d"
+    assert found["due_date"] == "2026-06-01"
+
+
+def test_custom_status_char_mark_done_writes_x(vault: VaultManager):
+    """mark_done on a [d] task must write [x]."""
+    tasks = vault.get_all_tasks()
+    doing = next(t for t in tasks if t.get("status_char") == "d")
+    updated = vault.update_task(doing["file_path"], doing["line_number"], "mark_done")
+    assert updated["status"] == "complete"
+    refreshed = vault.get_all_tasks()
+    found = next(
+        t for t in refreshed
+        if t["file_path"] == doing["file_path"] and t["line_number"] == doing["line_number"]
+    )
+    assert found["status_char"] == "x"
 
 
 # ---------------------------------------------------------------------------

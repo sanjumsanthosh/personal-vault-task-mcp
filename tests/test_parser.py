@@ -136,6 +136,107 @@ def test_parse_custom_status_preserves_description_and_metadata():
     assert "backend" in task["tags"]
 
 
+def test_parse_stores_status_char_space():
+    task = parse_task_line("- [ ] Normal pending", "f.md", 1)
+    assert task is not None
+    assert task["status_char"] == " "
+
+
+def test_parse_stores_status_char_x():
+    task = parse_task_line("- [x] Done task", "f.md", 1)
+    assert task is not None
+    assert task["status_char"] == "x"
+
+
+def test_parse_stores_status_char_custom():
+    task = parse_task_line("- [d] Doing task", "f.md", 1)
+    assert task is not None
+    assert task["status_char"] == "d"
+
+
+def test_parse_stores_status_char_blocked():
+    task = parse_task_line("- [!] Blocked", "f.md", 1)
+    assert task is not None
+    assert task["status_char"] == "!"
+
+
+def test_format_preserves_custom_status_char():
+    """format_task_line must write the original checkbox char for custom statuses."""
+    task = parse_task_line("- [d] Working on this", "f.md", 1)
+    assert task is not None
+    line = format_task_line(task)
+    assert line.startswith("- [d]")
+
+
+def test_format_preserves_blocked_char():
+    task = parse_task_line("- [!] Blocked", "f.md", 1)
+    assert task is not None
+    line = format_task_line(task)
+    assert line.startswith("- [!]")
+
+
+def test_format_custom_char_not_x_cannot_produce_complete():
+    """A task with a custom status_char but status=incomplete must NOT get [x]."""
+    task = {
+        "status": "incomplete",
+        "status_char": "d",
+        "description": "Doing task",
+        "priority": "none",
+        "due_date": "",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert line.startswith("- [d]")
+    assert not line.startswith("- [x]")
+
+
+def test_format_status_char_x_on_incomplete_falls_back_to_space():
+    """If somehow status_char='x' but status='incomplete', output must be '[ ]'."""
+    task = {
+        "status": "incomplete",
+        "status_char": "x",
+        "description": "Should not be [x]",
+        "priority": "none",
+        "due_date": "",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert line.startswith("- [ ]")
+
+
+def test_format_status_char_uppercase_x_on_incomplete_falls_back_to_space():
+    """If somehow status_char='X' but status='incomplete', output must be '[ ]'."""
+    task = {
+        "status": "incomplete",
+        "status_char": "X",
+        "description": "Should not be [X]",
+        "priority": "none",
+        "due_date": "",
+        "done_date": "",
+        "tags": [],
+    }
+    line = format_task_line(task)
+    assert line.startswith("- [ ]")
+
+
+def test_roundtrip_custom_status_char():
+    """parse → format → parse must preserve the custom checkbox character."""
+    original = "- [d] Working on auth 📅 2026-03-20 #backend"
+    task = parse_task_line(original, "f.md", 1)
+    assert task is not None
+    reformatted = format_task_line(task)
+    assert reformatted.startswith("- [d]")
+    task2 = parse_task_line(reformatted, "f.md", 1)
+    assert task2 is not None
+    assert task2["status"] == "incomplete"
+    assert task2["status_char"] == "d"
+    assert task2["description"] == task["description"]
+    assert task2["due_date"] == task["due_date"]
+    assert task2["tags"] == task["tags"]
+
+
 # ---------------------------------------------------------------------------
 # parse_task_line — due date
 # ---------------------------------------------------------------------------

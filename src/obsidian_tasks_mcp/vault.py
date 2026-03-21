@@ -125,6 +125,7 @@ class VaultManager:
             task["done_date"] = today
         elif operation == "mark_undone":
             task["status"] = "incomplete"
+            task["status_char"] = " "
             task["done_date"] = ""
         elif operation in ("add_due_date", "reschedule"):
             task["due_date"] = value
@@ -307,6 +308,7 @@ class VaultManager:
             task["done_date"] = today
         elif operation == "mark_undone":
             task["status"] = "incomplete"
+            task["status_char"] = " "
             task["done_date"] = ""
         elif operation in ("add_due_date", "reschedule"):
             task["due_date"] = value

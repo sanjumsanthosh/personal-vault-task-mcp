@@ -283,7 +283,14 @@ Any checkbox character other than `x`/`X` is treated as **incomplete**. This mea
 | `- [x] Task` | `complete` | Done |
 | `- [X] Task` | `complete` | Done (uppercase) |
 
-When filtering with `status="incomplete"`, all of the above non-`x` variants are returned. The raw checkbox character is not currently exposed as a separate field; the `status` field will be either `"incomplete"` or `"complete"`.
+When filtering with `status="incomplete"`, all of the above non-`x` variants are returned. Every parsed task exposes the raw bracket character as a separate **`status_char`** field (e.g. `"d"`, `"!"`, `" "`, `"x"`).
+
+Custom characters are **fully round-tripped**: any operation that doesn't change the status (add tag, reschedule, update description, add reminder, etc.) leaves the original bracket character intact. Only two operations affect the bracket:
+
+| Operation | Result |
+|-----------|--------|
+| `mark_done` | bracket becomes `x` (`- [x]`) |
+| `mark_undone` | bracket resets to a plain space (`- [ ]`) |
 
 ### Reminder plugin (`⏰`) support
 
