@@ -157,6 +157,14 @@ class VaultManager:
             task["reminder_time"] = value
         elif operation == "remove_reminder":
             task["reminder_time"] = ""
+        elif operation == "set_priority":
+            normalized_priority = value.strip().lower() if value else "none"
+            if normalized_priority not in ("highest", "high", "medium", "low", "lowest", "none"):
+                raise ValueError(
+                    f"Unknown priority value: {value!r}. "
+                    "Valid priorities: highest, high, medium, low, lowest, none"
+                )
+            task["priority"] = normalized_priority
         else:
             raise ValueError(f"Unknown operation: {operation!r}")
 
@@ -378,6 +386,14 @@ class VaultManager:
             task["reminder_time"] = value
         elif operation == "remove_reminder":
             task["reminder_time"] = ""
+        elif operation == "set_priority":
+            normalized_priority = value.strip().lower() if value else "none"
+            if normalized_priority not in ("highest", "high", "medium", "low", "lowest", "none"):
+                raise ValueError(
+                    f"Unknown priority value: {value!r}. "
+                    "Valid priorities: highest, high, medium, low, lowest, none"
+                )
+            task["priority"] = normalized_priority
         else:
             raise ValueError(f"Unknown operation: {operation!r}")
 

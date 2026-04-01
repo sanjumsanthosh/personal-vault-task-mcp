@@ -137,7 +137,7 @@ update_task(
 )
 ```
 
-**Operations:** `mark_done`, `mark_undone`, `mark_doing`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`
+**Operations:** `mark_done`, `mark_undone`, `mark_doing`, `add_due_date`, `reschedule`, `add_tag`, `remove_tag`, `update_description`, `add_reminder`, `remove_reminder`, `set_priority`
 
 | Operation | What it does | Natural language trigger |
 |-----------|-------------|--------------------------|
@@ -149,6 +149,7 @@ update_task(
 | `update_description` | — | — |
 | `add_reminder` | `YYYY-MM-DD` or `YYYY-MM-DD HH:mm` | — |
 | `remove_reminder` | — | — |
+| `set_priority` | Set task priority with one of `highest`, `high`, `medium`, `low`, `lowest`, `none` | "set to high priority", "make low priority" |
 
 ### `create_task`
 
@@ -158,7 +159,7 @@ create_task(
     tag="micro-mng-todo",
     due_date="2026-03-15",
     reminder_time="2026-03-15 09:00",  # ⏰ YYYY-MM-DD or YYYY-MM-DD HH:mm (optional)
-    priority="high",                    # "highest" | "high" | "medium" | "low" | "none"
+    priority="high",                    # "highest" | "high" | "medium" | "low" | "lowest" | "none"
     target="daily_note",                # "daily_note" | "inbox" | "file"
     file_path=""                        # only needed when target="file"
 )

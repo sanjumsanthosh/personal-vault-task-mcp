@@ -178,7 +178,7 @@ def update_task(
         operation:   One of: mark_done, mark_undone, mark_doing,
                      add_due_date, reschedule,
                      add_tag, remove_tag, update_description,
-                     add_reminder, remove_reminder.
+                     add_reminder, remove_reminder, set_priority.
                      Natural-language guidance:
                        "mark this done / complete it"
                            → operation="mark_done"
@@ -425,7 +425,7 @@ def bulk_update_tasks(
         operation:           One of: mark_done, mark_undone, mark_doing,
                              add_due_date, reschedule,
                              add_tag, remove_tag, update_description,
-                             add_reminder, remove_reminder.
+                             add_reminder, remove_reminder, set_priority.
                              Natural-language guidance:
                                "mark these tasks as in-progress / I've started working"
                                    → operation="mark_doing"

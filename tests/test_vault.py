@@ -237,6 +237,34 @@ def test_update_reschedule(vault: VaultManager):
     assert updated["due_date"] == "2026-05-01"
 
 
+def test_update_set_priority(vault: VaultManager):
+    tasks = vault.get_all_tasks()
+    task = next(t for t in tasks if t["priority"] == "none")
+    updated = vault.update_task(task["file_path"], task["line_number"], "set_priority", "high")
+    assert updated["priority"] == "high"
+
+    refreshed = vault.get_all_tasks()
+    found = next(
+        (t for t in refreshed if t["file_path"] == task["file_path"] and t["line_number"] == task["line_number"]),
+        None,
+    )
+    assert found is not None
+    assert found["priority"] == "high"
+
+
+def test_bulk_update_set_priority(vault: VaultManager):
+    tasks = [t for t in vault.get_all_tasks() if t["priority"] == "none"]
+    assert len(tasks) >= 2
+    ids = [t["id"] for t in tasks[:2]]
+    result = vault.bulk_update_tasks(ids, "set_priority", "low")
+    assert result["updated_count"] == len(ids)
+
+    refreshed = vault.get_all_tasks()
+    for tid in ids:
+        fp, ln = tid.rsplit(":", 1)
+        assert next(t for t in refreshed if t["file_path"] == fp and t["line_number"] == int(ln))["priority"] == "low"
+
+
 # ---------------------------------------------------------------------------
 # update_task — tag operations
 # ---------------------------------------------------------------------------
