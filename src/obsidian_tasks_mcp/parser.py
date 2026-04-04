@@ -44,10 +44,10 @@ WIKILINK_PATTERN = re.compile(r"\[\[([^\]|]+)(?:\|[^\]]*)?\]\]")
 # Each entry: (tuple of emoji variants, priority name)
 _PRIORITY_ENTRIES: list[tuple[tuple[str, ...], str]] = [
     (("🔺",), "highest"),
-    (("⬆️", "⬆"),  "high"),
+    (("⏫",),  "high"),
     (("🔼",), "medium"),
     (("🔽",), "low"),
-    (("⬇️", "⬇"),  "lowest"),
+    (("⏬", "⬇"),  "lowest"),
 ]
 
 # Build lookup maps
