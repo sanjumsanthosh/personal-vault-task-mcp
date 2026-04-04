@@ -195,11 +195,6 @@ def format_task_line(task: dict) -> str:
 
     parts: list[str] = [f"- [{status_char}]", task.get("description", "").strip()]
 
-    priority = task.get("priority", "none")
-    if priority and priority != "none":
-        emoji = PRIORITY_TO_EMOJI.get(priority, "")
-        if emoji:
-            parts.append(emoji)
 
     reminder_time = task.get("reminder_time", "")
     if reminder_time:
@@ -216,5 +211,11 @@ def format_task_line(task: dict) -> str:
     for tag in task.get("tags", []):
         if tag:
             parts.append(f"#{tag}")
+    
+    priority = task.get("priority", "none")
+    if priority and priority != "none":
+        emoji = PRIORITY_TO_EMOJI.get(priority, "")
+        if emoji:
+            parts.append(emoji)
 
     return " ".join(p for p in parts if p)
